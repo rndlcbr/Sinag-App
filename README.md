@@ -9,7 +9,7 @@ SINAG addresses this by:
 •	Labeling each entry with its source and date posted so users can judge reliability
 •	Making information easy to find through search and category filtering
 •	Encouraging learning through a quiz
-1.	Project Objectives
+4.	Project Objectives
 General objective: To develop a console-based information system that improves public awareness and preparedness for El Niño.
 Specific objectives:
 •	To provide educational articles, advisories, FAQs, and preparedness guides in one system.
@@ -19,7 +19,7 @@ Specific objectives:
 5. Target Users
 General Public - Browse educational articles, read advisories, view FAQs and preparedness guides, search or filter information, and take quizzes to check their understanding.
 Administrator - Manage educational articles, advisories, FAQs, preparedness guides, announcements, quiz questions, answer choices, correct answers, and explanations.
-1.	Main Features
+6.	Main Features
 •	Educational Articles: Articles about El Niño causes, effects, and impacts.
 •	Public Advisories: View advisories with severity level with announcements.
 •	FAQs: Quick answers to common questions.
@@ -35,7 +35,7 @@ Administrator - Manage educational articles, advisories, FAQs, preparedness guid
 1.	Cabrera, Dwyane Lloyd D. - GUI and user-module lead, help design the Java GUI, main menu, navigation, and public user functions.
 2.	Ramirez, Fatima C. -  help organize educational content and advisories and implement database storage, Readme and paper making.
 3.	Villanueva, Adrian Justine M. - Quiz and integration lead, help implement quiz mechanics, scoring and feedback, integrate modules, and coordinate testing.
-1.	OOP Concepts Demonstrated
+9.	OOP Concepts Demonstrated
 •	Classes and Objects: Create classes such as User, Administrator, Article, Advisory, QuizQuestion, and QuizGame. Objects represent individual users, posts, advisories, and quiz activities.
 •	Methods: Use methods to perform actions such as displayContent(), searchContent(), publishAdvisory(), checkAnswer(), calculateScore(), and manageQuestions().
 •	Encapsulation: Keep data fields private and provide appropriate public methods (getters/setters) to control access to user, content, and quiz information.
@@ -44,9 +44,9 @@ Administrator - Manage educational articles, advisories, FAQs, preparedness guid
 •	Abstraction: Use abstract classes or interfaces for shared content-management behavior where appropriate, so specific content classes provide their own implementations.
 •	Exception Handling: Handle possible errors such as invalid input, missing required fields, database connection problems, and unavailable records using try-catch and suitable validation.
 •	Arrays/Data Handling: Use arrays or other suitable collections to store and process quiz choices, questions, search results, and lists of information retrieved from the database.
-1.	Instructions for Running the Program
-1.	Sample Screenshots
-1.	Known limitations
+10.	Instructions for Running the Program
+11.	Sample Screenshots
+12.	Known limitations
 • The system will not independently generate live weather forecasts or government warnings unless an official data integration is separately implemented.
 • Advisory accuracy and timeliness will depend on information entered and verified by authorized administrators.
 • The application will not replace official announcements, weather bulletins, emergency services, or guidance from government agencies and local authorities.
@@ -57,7 +57,7 @@ Administrator - Manage educational articles, advisories, FAQs, preparedness guid
 •	Push or SMS notifications for critical advisories
 •	Multiplayer quiz and leaderboard
 •	Database storage (MySQL or SQLite)
-1.	Project Contributors
+14.	Project Contributors
 1.	Cabrera, Dwyane Lloyd D.
 2.	Ramirez, Fatima C.
 3.	Villanueva, Adrian Justine M.
