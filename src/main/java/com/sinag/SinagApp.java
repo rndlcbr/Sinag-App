@@ -189,6 +189,7 @@ public class SinagApp extends JFrame {
         heroBanner.setLayout(new BorderLayout());
         heroBanner.setBorder(new EmptyBorder(27, 30, 27, 30));
 
+        // Left side of hero banner: Title and subtitle
         JPanel heroText = new JPanel();
         heroText.setOpaque(false);
         heroText.setLayout(new BoxLayout(heroText, BoxLayout.Y_AXIS));
@@ -212,10 +213,62 @@ public class SinagApp extends JFrame {
         heroText.add(subtitle);
         heroBanner.add(heroText, BorderLayout.CENTER);
 
-        JLabel sunIcon = new JLabel("☀");
-        sunIcon.setFont(new Font("SansSerif", Font.PLAIN, 72));
-        sunIcon.setForeground(new Color(255, 231, 157));
-        heroBanner.add(sunIcon, BorderLayout.EAST);
+        // Right side of hero banner: Live Weather widget
+        JPanel weatherBox = new JPanel();
+        weatherBox.setOpaque(false);
+        weatherBox.setLayout(new BoxLayout(weatherBox, BoxLayout.Y_AXIS));
+        weatherBox.setBorder(new EmptyBorder(4, 16, 4, 4));
+
+        JLabel weatherTitle = new JLabel("☀ LIVE WEATHER");
+        weatherTitle.setFont(new Font("SansSerif", Font.BOLD, 10));
+        weatherTitle.setForeground(new Color(204, 244, 237));
+        weatherTitle.setAlignmentX(Component.RIGHT_ALIGNMENT);
+
+        JLabel weatherTemp = new JLabel("Loading...");
+        weatherTemp.setFont(new Font("SansSerif", Font.BOLD, 24));
+        weatherTemp.setForeground(new Color(255, 231, 157));
+        weatherTemp.setAlignmentX(Component.RIGHT_ALIGNMENT);
+
+        JLabel weatherDetails = new JLabel("Batangas City");
+        weatherDetails.setFont(new Font("SansSerif", Font.PLAIN, 12));
+        weatherDetails.setForeground(new Color(225, 242, 246));
+        weatherDetails.setAlignmentX(Component.RIGHT_ALIGNMENT);
+
+        weatherBox.add(weatherTitle);
+        weatherBox.add(Box.createVerticalStrut(4));
+        weatherBox.add(weatherTemp);
+        weatherBox.add(Box.createVerticalStrut(4));
+        weatherBox.add(weatherDetails);
+        heroBanner.add(weatherBox, BorderLayout.EAST);
+
+        // Fetch live weather in the background so the UI never freezes
+        new SwingWorker<String, Void>() {
+            @Override
+            protected String doInBackground() {
+                return WeatherService.fetchLiveWeather();
+            }
+
+            @Override
+            protected void done() {
+                try {
+                    // Expected format: "Batangas City: 31.2°C (Feels like 35.0°C)  •  Humidity: 74%"
+                    String fullText = get();
+                    if (fullText.contains(": ") && fullText.contains("°C")) {
+                        String afterCity = fullText.substring(fullText.indexOf(": ") + 2);
+                        String tempPart = afterCity.substring(0, afterCity.indexOf("°C") + 2);
+                        String extraPart = afterCity.substring(afterCity.indexOf("°C") + 2).trim();
+                        weatherTemp.setText(tempPart);
+                        weatherDetails.setText("Batangas City " + extraPart);
+                    } else {
+                        weatherTemp.setText("--°C");
+                        weatherDetails.setText(fullText);
+                    }
+                } catch (Exception ex) {
+                    weatherTemp.setText("--°C");
+                    weatherDetails.setText("Weather unavailable");
+                }
+            }
+        }.execute();
 
         // Center 2x2 Feature Cards
         JPanel centerSection = new JPanel(new BorderLayout(0, 15));
