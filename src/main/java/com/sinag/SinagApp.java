@@ -2,84 +2,103 @@ package com.sinag;
 
 import javax.swing.*;
 import javax.swing.border.EmptyBorder;
+import javax.swing.filechooser.FileNameExtensionFilter;
+import javax.swing.table.DefaultTableCellRenderer;
+import javax.swing.table.DefaultTableModel;
 import java.awt.*;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
+import java.io.File;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.StandardCopyOption;
 import java.sql.SQLException;
 import java.time.LocalDate;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.List;
 
 /**
- * Main Swing GUI window for SINAG: El Niño Awareness and Preparedness System.
+ * Modern, interactive Swing UI for SINAG: El Niño Awareness and Preparedness System.
+ * Theme: Solar Amber (heat/sunlight awareness) + Deep Ocean & Teal (water conservation & readiness).
  */
 public class SinagApp extends JFrame {
 
-    // --- THEME COLORS ---
-    private static final Color NAVY = new Color(17, 43, 66);
-    private static final Color NAVY_LIGHT = new Color(29, 66, 91);
-    private static final Color TEAL = new Color(0, 137, 123);
-    private static final Color BACKGROUND = new Color(241, 246, 249);
-    private static final Color TEXT_DARK = new Color(39, 57, 72);
-    private static final Color TEXT_MUTED = new Color(111, 130, 145);
-    private static final Color BORDER_COLOR = new Color(222, 231, 237);
+    // --- EL NIÑO CLIMATE & SOLAR THEME PALETTE ---
+    private static final Color OCEAN_DARK   = new Color(15, 41, 58);     // Header & primary headings
+    private static final Color OCEAN_MID    = new Color(26, 58, 79);     // Secondary dark accents
+    private static final Color TEAL_PRIMARY = new Color(13, 148, 136);   // Action buttons & water theme
+    private static final Color TEAL_SOFT    = new Color(204, 244, 237);  // Soft highlight tint
+    private static final Color SOLAR_AMBER  = new Color(245, 158, 11);   // "Sinag" sunlight accent
+    private static final Color SOLAR_SOFT   = new Color(254, 243, 199);  // Warm alert banner background
+    private static final Color SOLAR_TEXT   = new Color(146, 64, 14);    // Warm dark amber text
+    private static final Color BG_CANVAS    = new Color(244, 247, 250);  // Clean off-white workspace
+    private static final Color SIDEBAR_BG   = new Color(235, 241, 246);  // Soft slate sidebar
+    private static final Color TEXT_MAIN    = new Color(30, 41, 59);     // Readable dark slate body
+    private static final Color TEXT_MUTED   = new Color(100, 116, 139);  // Subtitles & metadata
+    private static final Color BORDER_LIGHT = new Color(218, 227, 235);  // Subtle card borders
 
-    // --- CORE COMPONENTS ---
+    // --- CORE SERVICES & STATE ---
     private final Database db = new Database();
     private final JPanel mainContentArea = new JPanel(new BorderLayout());
+    private final List<JButton> navButtons = new ArrayList<>();
+    private String activeMenuKey = "Home";
 
-    // --- QUIZ STATE VARIABLES (Stored as fields so they are easy to read and update) ---
+    // --- QUIZ STATE ---
     private List<QuizQuestion> quizQuestions = new ArrayList<>();
     private int currentQuestionIndex = 0;
     private int quizScore = 0;
     private boolean hasAnswered = false;
 
     public SinagApp() {
-        // Window setup
         setTitle("SINAG: El Niño Awareness and Preparedness System");
         setDefaultCloseOperation(EXIT_ON_CLOSE);
-        setSize(1180, 760);
-        setMinimumSize(new Dimension(940, 640));
-        setLocationRelativeTo(null); // Center window on screen
-        getContentPane().setBackground(BACKGROUND);
+        setSize(1200, 780);
+        setMinimumSize(new Dimension(960, 650));
+        setLocationRelativeTo(null);
+        getContentPane().setBackground(BG_CANVAS);
         setLayout(new BorderLayout());
 
-        // Add top header, left navigation menu, and center content area
         add(createHeader(), BorderLayout.NORTH);
         add(createSidebar(), BorderLayout.WEST);
 
-        mainContentArea.setBackground(BACKGROUND);
+        mainContentArea.setBackground(BG_CANVAS);
         add(mainContentArea, BorderLayout.CENTER);
 
-        // Load the Home page first
         showHome();
     }
 
     // =========================================================================
-    // 1. HEADER & SIDEBAR NAVIGATION
+    // 1. TOP HEADER & INTERACTIVE SIDEBAR
     // =========================================================================
 
     private JPanel createHeader() {
         JPanel header = new JPanel(new BorderLayout());
-        header.setBackground(NAVY);
-        header.setBorder(new EmptyBorder(17, 25, 17, 25));
+        header.setBackground(OCEAN_DARK);
+        header.setBorder(BorderFactory.createCompoundBorder(
+            BorderFactory.createMatteBorder(0, 0, 3, 0, SOLAR_AMBER),
+            new EmptyBorder(15, 26, 15, 26)
+        ));
 
         JPanel brandPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 0, 0));
         brandPanel.setOpaque(false);
 
-        JLabel logo = new JLabel("☀  SINAG");
-        logo.setFont(new Font("SansSerif", Font.BOLD, 25));
+        JLabel sunBadge = new JLabel("☀ ");
+        sunBadge.setFont(new Font("SansSerif", Font.BOLD, 26));
+        sunBadge.setForeground(SOLAR_AMBER);
+
+        JLabel logo = new JLabel("SINAG");
+        logo.setFont(new Font("SansSerif", Font.BOLD, 24));
         logo.setForeground(Color.WHITE);
 
-        JLabel tagline = new JLabel("   |   EL NIÑO AWARENESS & PREPAREDNESS");
-        tagline.setFont(new Font("SansSerif", Font.PLAIN, 11));
-        tagline.setForeground(new Color(190, 218, 229));
+        JLabel tagline = new JLabel("   |   EL NIÑO AWARENESS & COMMUNITY READINESS");
+        tagline.setFont(new Font("SansSerif", Font.BOLD, 11));
+        tagline.setForeground(new Color(186, 214, 226));
 
+        brandPanel.add(sunBadge);
         brandPanel.add(logo);
         brandPanel.add(tagline);
 
-        JButton adminBtn = createStyledButton("ADMIN PORTAL", TEAL);
+        JButton adminBtn = createStyledButton("⚙  ADMIN PORTAL", TEAL_PRIMARY);
         adminBtn.addActionListener(e -> openAdminLogin());
 
         header.add(brandPanel, BorderLayout.WEST);
@@ -89,18 +108,21 @@ public class SinagApp extends JFrame {
 
     private JPanel createSidebar() {
         JPanel sidebar = new JPanel();
-        sidebar.setPreferredSize(new Dimension(215, 0));
-        sidebar.setBackground(new Color(229, 238, 243));
-        sidebar.setBorder(new EmptyBorder(22, 13, 18, 13));
+        sidebar.setPreferredSize(new Dimension(240, 0));
+        sidebar.setBackground(SIDEBAR_BG);
+        sidebar.setBorder(BorderFactory.createCompoundBorder(
+            BorderFactory.createMatteBorder(0, 0, 0, 1, BORDER_LIGHT),
+            new EmptyBorder(20, 14, 18, 14)
+        ));
         sidebar.setLayout(new BoxLayout(sidebar, BoxLayout.Y_AXIS));
 
-        JLabel menuLabel = new JLabel("  MAIN MENU");
+        JLabel menuLabel = new JLabel("NAVIGATION");
         menuLabel.setFont(new Font("SansSerif", Font.BOLD, 10));
         menuLabel.setForeground(TEXT_MUTED);
-        menuLabel.setBorder(new EmptyBorder(0, 8, 12, 0));
+        menuLabel.setAlignmentX(Component.LEFT_ALIGNMENT);
+        menuLabel.setBorder(new EmptyBorder(0, 10, 10, 0));
         sidebar.add(menuLabel);
 
-        // Menu items: {Icon, Display Label, Page Key}
         String[][] menuItems = {
             {"⌂", "Home", "Home"},
             {"▤", "Articles", "Article"},
@@ -111,137 +133,166 @@ public class SinagApp extends JFrame {
             {"ⓘ", "About SINAG", "About"}
         };
 
+        navButtons.clear();
         for (String[] item : menuItems) {
             String icon = item[0];
             String label = item[1];
             String pageKey = item[2];
 
-            JButton navButton = new JButton(icon + "   " + label);
-            navButton.setHorizontalAlignment(SwingConstants.LEFT);
-            navButton.setFont(new Font("SansSerif", Font.BOLD, 12));
-            navButton.setForeground(NAVY);
-            navButton.setBackground(new Color(229, 238, 243));
-            navButton.setBorder(new EmptyBorder(12, 12, 12, 8));
-            navButton.setFocusPainted(false);
-            navButton.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
-            navButton.setMaximumSize(new Dimension(Integer.MAX_VALUE, 45));
+            JButton btn = new JButton(icon + "   " + label);
+            btn.setActionCommand(pageKey);
+            btn.setHorizontalAlignment(SwingConstants.LEFT);
+            btn.setAlignmentX(Component.LEFT_ALIGNMENT);
+            btn.setFont(new Font("SansSerif", Font.BOLD, 12));
+            btn.setFocusPainted(false);
+            btn.setOpaque(true);
+            btn.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
+            btn.setMaximumSize(new Dimension(Integer.MAX_VALUE, 42));
 
-            // Hover highlight effect
-            navButton.addMouseListener(new MouseAdapter() {
+            btn.addMouseListener(new MouseAdapter() {
                 @Override
                 public void mouseEntered(MouseEvent e) {
-                    navButton.setBackground(new Color(211, 231, 235));
+                    if (!pageKey.equals(activeMenuKey)) {
+                        btn.setBackground(new Color(222, 232, 240));
+                    }
                 }
                 @Override
                 public void mouseExited(MouseEvent e) {
-                    navButton.setBackground(new Color(229, 238, 243));
+                    if (!pageKey.equals(activeMenuKey)) {
+                        btn.setBackground(SIDEBAR_BG);
+                    }
                 }
             });
 
-            // Switch page on click
-            navButton.addActionListener(e -> {
-                if (pageKey.equals("Home")) {
-                    showHome();
-                } else if (pageKey.equals("Quiz")) {
-                    showQuiz();
-                } else if (pageKey.equals("About")) {
-                    showAbout();
-                } else {
-                    showContentPage(pageKey);
+            btn.addActionListener(e -> {
+                setActiveNav(pageKey);
+                switch (pageKey) {
+                    case "Home"  -> showHome();
+                    case "Quiz"  -> showQuiz();
+                    case "About" -> showAbout();
+                    default      -> showContentPage(pageKey);
                 }
             });
 
-            sidebar.add(navButton);
+            navButtons.add(btn);
+            sidebar.add(btn);
             sidebar.add(Box.createVerticalStrut(5));
         }
 
+        setActiveNav(activeMenuKey);
         sidebar.add(Box.createVerticalGlue());
 
-        JLabel infoBox = new JLabel("<html><div style='width:155px'><b>STAY INFORMED</b><br><br>"
-                + "Preparedness starts with reliable information and small daily actions.</div></html>");
-        infoBox.setFont(new Font("SansSerif", Font.PLAIN, 11));
-        infoBox.setForeground(new Color(77, 105, 121));
-        infoBox.setBorder(new EmptyBorder(12, 9, 12, 9));
-        infoBox.setBackground(new Color(215, 234, 237));
-        infoBox.setOpaque(true);
-        sidebar.add(infoBox);
+        // Climate Readiness Tip Box
+        RoundedPanel tipCard = new RoundedPanel(14, SOLAR_SOFT, new Color(253, 230, 138));
+        tipCard.setLayout(new BorderLayout());
+        tipCard.setAlignmentX(Component.LEFT_ALIGNMENT);
+        tipCard.setBorder(new EmptyBorder(12, 12, 12, 12));
+        tipCard.setMaximumSize(new Dimension(Integer.MAX_VALUE, 105));
+
+        JLabel tipText = new JLabel("<html><div style='width:180px; color:#78350F;'>"
+                + "<b>☀ BEAT THE HEAT</b><br><br>"
+                + "Conserve water daily and stay hydrated during peak afternoon heat.</div></html>");
+        tipText.setFont(new Font("SansSerif", Font.PLAIN, 11));
+        tipCard.add(tipText, BorderLayout.CENTER);
+
+        sidebar.add(tipCard);
         sidebar.add(Box.createVerticalStrut(12));
 
-        JButton exitBtn = createStyledButton("  Exit application", NAVY_LIGHT);
+        JButton exitBtn = createStyledButton("⏻  Exit Application", OCEAN_MID);
         exitBtn.setHorizontalAlignment(SwingConstants.LEFT);
+        exitBtn.setAlignmentX(Component.LEFT_ALIGNMENT);
+        exitBtn.setMaximumSize(new Dimension(Integer.MAX_VALUE, 42));
         exitBtn.addActionListener(e -> dispose());
         sidebar.add(exitBtn);
 
         return sidebar;
     }
 
+    private void setActiveNav(String key) {
+        activeMenuKey = key;
+        for (JButton btn : navButtons) {
+            boolean isActive = btn.getActionCommand().equals(key);
+            if (isActive) {
+                btn.setBackground(Color.WHITE);
+                btn.setForeground(TEAL_PRIMARY);
+                btn.setBorder(BorderFactory.createCompoundBorder(
+                    BorderFactory.createMatteBorder(0, 4, 0, 0, SOLAR_AMBER),
+                    new EmptyBorder(10, 10, 10, 8)
+                ));
+            } else {
+                btn.setBackground(SIDEBAR_BG);
+                btn.setForeground(OCEAN_DARK);
+                btn.setBorder(new EmptyBorder(10, 14, 10, 8));
+            }
+        }
+    }
+
     // =========================================================================
-    // 2. HOME PAGE
+    // 2. HOME DASHBOARD (Hero + Live Weather Widget + Interactive Cards)
     // =========================================================================
 
     private void showHome() {
+        setActiveNav("Home");
         JPanel homePanel = new JPanel(new BorderLayout(0, 18));
-        homePanel.setBackground(BACKGROUND);
-        homePanel.setBorder(new EmptyBorder(25, 28, 25, 28));
+        homePanel.setBackground(BG_CANVAS);
+        homePanel.setBorder(new EmptyBorder(24, 28, 22, 28));
 
-        // Top gradient hero banner
+        // Hero Banner with Solar-to-Ocean Gradient
         GradientPanel heroBanner = new GradientPanel();
-        heroBanner.setLayout(new BorderLayout());
-        heroBanner.setBorder(new EmptyBorder(27, 30, 27, 30));
+        heroBanner.setLayout(new BorderLayout(20, 0));
+        heroBanner.setBorder(new EmptyBorder(26, 30, 26, 30));
 
-        // Left side of hero banner: Title and subtitle
         JPanel heroText = new JPanel();
         heroText.setOpaque(false);
         heroText.setLayout(new BoxLayout(heroText, BoxLayout.Y_AXIS));
 
-        JLabel eyebrow = new JLabel("EL NIÑO  •  CLIMATE AWARENESS  •  COMMUNITY READINESS");
-        eyebrow.setForeground(new Color(204, 244, 237));
+        JLabel eyebrow = new JLabel("EL NIÑO  •  CLIMATE AWARENESS  •  HOUSEHOLD READINESS");
+        eyebrow.setForeground(new Color(253, 230, 138));
         eyebrow.setFont(new Font("SansSerif", Font.BOLD, 10));
 
         JLabel title = new JLabel("Be informed. Be prepared. Stay safe.");
         title.setForeground(Color.WHITE);
-        title.setFont(new Font("SansSerif", Font.BOLD, 25));
+        title.setFont(new Font("SansSerif", Font.BOLD, 26));
 
-        JLabel subtitle = new JLabel("Practical knowledge and preparedness resources for every household.");
-        subtitle.setForeground(new Color(225, 242, 246));
+        JLabel subtitle = new JLabel("Actionable climate knowledge, water-saving advisories, and readiness guides.");
+        subtitle.setForeground(new Color(224, 242, 254));
         subtitle.setFont(new Font("SansSerif", Font.PLAIN, 13));
 
         heroText.add(eyebrow);
-        heroText.add(Box.createVerticalStrut(12));
+        heroText.add(Box.createVerticalStrut(10));
         heroText.add(title);
         heroText.add(Box.createVerticalStrut(8));
         heroText.add(subtitle);
         heroBanner.add(heroText, BorderLayout.CENTER);
 
-        // Right side of hero banner: Live Weather widget
-        JPanel weatherBox = new JPanel();
-        weatherBox.setOpaque(false);
-        weatherBox.setLayout(new BoxLayout(weatherBox, BoxLayout.Y_AXIS));
-        weatherBox.setBorder(new EmptyBorder(4, 16, 4, 4));
+        // Right-side Live Weather Card inside Hero
+        RoundedPanel weatherCard = new RoundedPanel(16, new Color(15, 41, 58, 170), new Color(255, 255, 255, 60));
+        weatherCard.setLayout(new BoxLayout(weatherCard, BoxLayout.Y_AXIS));
+        weatherCard.setBorder(new EmptyBorder(14, 18, 14, 18));
 
-        JLabel weatherTitle = new JLabel("☀ LIVE WEATHER");
-        weatherTitle.setFont(new Font("SansSerif", Font.BOLD, 10));
-        weatherTitle.setForeground(new Color(204, 244, 237));
-        weatherTitle.setAlignmentX(Component.RIGHT_ALIGNMENT);
+        JLabel weatherBadge = new JLabel("☀ LIVE WEATHER");
+        weatherBadge.setFont(new Font("SansSerif", Font.BOLD, 10));
+        weatherBadge.setForeground(SOLAR_AMBER);
+        weatherBadge.setAlignmentX(Component.RIGHT_ALIGNMENT);
 
         JLabel weatherTemp = new JLabel("Loading...");
-        weatherTemp.setFont(new Font("SansSerif", Font.BOLD, 24));
-        weatherTemp.setForeground(new Color(255, 231, 157));
+        weatherTemp.setFont(new Font("SansSerif", Font.BOLD, 25));
+        weatherTemp.setForeground(Color.WHITE);
         weatherTemp.setAlignmentX(Component.RIGHT_ALIGNMENT);
 
         JLabel weatherDetails = new JLabel("Batangas City");
-        weatherDetails.setFont(new Font("SansSerif", Font.PLAIN, 12));
-        weatherDetails.setForeground(new Color(225, 242, 246));
+        weatherDetails.setFont(new Font("SansSerif", Font.PLAIN, 11));
+        weatherDetails.setForeground(new Color(204, 244, 237));
         weatherDetails.setAlignmentX(Component.RIGHT_ALIGNMENT);
 
-        weatherBox.add(weatherTitle);
-        weatherBox.add(Box.createVerticalStrut(4));
-        weatherBox.add(weatherTemp);
-        weatherBox.add(Box.createVerticalStrut(4));
-        weatherBox.add(weatherDetails);
-        heroBanner.add(weatherBox, BorderLayout.EAST);
+        weatherCard.add(weatherBadge);
+        weatherCard.add(Box.createVerticalStrut(4));
+        weatherCard.add(weatherTemp);
+        weatherCard.add(Box.createVerticalStrut(4));
+        weatherCard.add(weatherDetails);
+        heroBanner.add(weatherCard, BorderLayout.EAST);
 
-        // Fetch live weather in the background so the UI never freezes
+        // Fetch live weather asynchronously
         new SwingWorker<String, Void>() {
             @Override
             protected String doInBackground() {
@@ -251,7 +302,6 @@ public class SinagApp extends JFrame {
             @Override
             protected void done() {
                 try {
-                    // Expected format: "Batangas City: 31.2°C (Feels like 35.0°C)  •  Humidity: 74%"
                     String fullText = get();
                     if (fullText.contains(": ") && fullText.contains("°C")) {
                         String afterCity = fullText.substring(fullText.indexOf(": ") + 2);
@@ -270,55 +320,57 @@ public class SinagApp extends JFrame {
             }
         }.execute();
 
-        // Center 2x2 Feature Cards
-        JPanel centerSection = new JPanel(new BorderLayout(0, 15));
+        // Center Section: 2x2 Interactive Feature Cards
+        JPanel centerSection = new JPanel(new BorderLayout(0, 14));
         centerSection.setOpaque(false);
 
         JPanel sectionHeading = new JPanel();
         sectionHeading.setOpaque(false);
         sectionHeading.setLayout(new BoxLayout(sectionHeading, BoxLayout.Y_AXIS));
 
-        JLabel exploreTitle = new JLabel("Explore SINAG");
-        exploreTitle.setFont(new Font("SansSerif", Font.BOLD, 21));
-        exploreTitle.setForeground(NAVY);
+        JLabel exploreTitle = new JLabel("Explore SINAG Modules");
+        exploreTitle.setFont(new Font("SansSerif", Font.BOLD, 20));
+        exploreTitle.setForeground(OCEAN_DARK);
 
-        JLabel exploreSub = new JLabel("Learn about climate conditions and everyday preparedness.");
+        JLabel exploreSub = new JLabel("Click any module below to read climate guides or test your preparedness.");
         exploreSub.setFont(new Font("SansSerif", Font.PLAIN, 12));
         exploreSub.setForeground(TEXT_MUTED);
 
         sectionHeading.add(exploreTitle);
-        sectionHeading.add(Box.createVerticalStrut(5));
+        sectionHeading.add(Box.createVerticalStrut(4));
         sectionHeading.add(exploreSub);
         centerSection.add(sectionHeading, BorderLayout.NORTH);
 
-        JPanel cardGrid = new JPanel(new GridLayout(2, 2, 14, 14));
+        JPanel cardGrid = new JPanel(new GridLayout(2, 2, 16, 16));
         cardGrid.setOpaque(false);
 
-        addHomeCard(cardGrid, "▤", "EDUCATIONAL ARTICLES",
-            "Understand El Niño, its causes, and possible effects.",
-            "Explore articles", () -> showContentPage("Article"));
+        addInteractiveHomeCard(cardGrid, "▤", "EDUCATIONAL ARTICLES", TEAL_PRIMARY,
+            "Understand what El Niño is, its global climate drivers, and local impacts.",
+            "Explore Articles", () -> showContentPage("Article"));
 
-        addHomeCard(cardGrid, "⚑", "PUBLIC ADVISORIES",
-            "Read reminders about water conservation and heat safety.",
-            "View advisories", () -> showContentPage("Advisory"));
+        addInteractiveHomeCard(cardGrid, "⚑", "PUBLIC ADVISORIES", SOLAR_AMBER,
+            "Stay updated on water conservation alerts and extreme heat safety reminders.",
+            "View Advisories", () -> showContentPage("Advisory"));
 
-        addHomeCard(cardGrid, "＋", "PREPAREDNESS CENTER",
-            "Find household readiness tips, FAQs, and practical guides.",
-            "Open resources", () -> showContentPage("Guide"));
+        addInteractiveHomeCard(cardGrid, "＋", "PREPAREDNESS GUIDES", new Color(2, 132, 199),
+            "Practical household checklists, emergency water storage, and cooling tips.",
+            "Open Guides", () -> showContentPage("Guide"));
 
-        addHomeCard(cardGrid, "★", "PREPAREDNESS QUIZ",
-            "Test your knowledge and learn through instant feedback.",
-            "Start quiz", this::showQuiz);
+        addInteractiveHomeCard(cardGrid, "★", "PREPAREDNESS QUIZ", new Color(217, 119, 6),
+            "Challenge yourself with interactive questions and instant explanations.",
+            "Start Quiz", this::showQuiz);
 
         centerSection.add(cardGrid, BorderLayout.CENTER);
 
-        // Bottom reminder bar
-        JLabel reminderBar = new JLabel("☀  PREPAREDNESS REMINDER   Keep drinking water available and follow verified local announcements.");
-        reminderBar.setForeground(new Color(47, 102, 105));
-        reminderBar.setFont(new Font("SansSerif", Font.BOLD, 11));
-        reminderBar.setBorder(new EmptyBorder(13, 15, 13, 15));
-        reminderBar.setBackground(new Color(222, 242, 237));
-        reminderBar.setOpaque(true);
+        // Bottom Preparedness Reminder Banner
+        RoundedPanel reminderBar = new RoundedPanel(12, SOLAR_SOFT, new Color(253, 230, 138));
+        reminderBar.setLayout(new BorderLayout());
+        reminderBar.setBorder(new EmptyBorder(12, 16, 12, 16));
+
+        JLabel reminderText = new JLabel("☀  PREPAREDNESS REMINDER: Store clean drinking water safely and verify advisories with PAGASA and your LGU.");
+        reminderText.setForeground(SOLAR_TEXT);
+        reminderText.setFont(new Font("SansSerif", Font.BOLD, 11));
+        reminderBar.add(reminderText, BorderLayout.CENTER);
 
         homePanel.add(heroBanner, BorderLayout.NORTH);
         homePanel.add(centerSection, BorderLayout.CENTER);
@@ -327,23 +379,25 @@ public class SinagApp extends JFrame {
         switchMainPage(homePanel);
     }
 
-    private void addHomeCard(JPanel parentGrid, String icon, String title, String desc, String buttonText, Runnable onClickAction) {
-        RoundedPanel card = new RoundedPanel(18, Color.WHITE);
-        card.setLayout(new BorderLayout(8, 8));
-        card.setBorder(new EmptyBorder(17, 18, 16, 18));
+    private void addInteractiveHomeCard(JPanel parentGrid, String icon, String title, Color accentColor,
+                                        String desc, String buttonText, Runnable onClickAction) {
+        RoundedPanel card = new RoundedPanel(18, Color.WHITE, BORDER_LIGHT);
+        card.setLayout(new BorderLayout(8, 10));
+        card.setBorder(new EmptyBorder(18, 20, 16, 20));
+        card.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
 
         JPanel cardHeader = new JPanel(new FlowLayout(FlowLayout.LEFT, 0, 0));
         cardHeader.setOpaque(false);
 
-        JLabel iconLabel = new JLabel(icon);
-        iconLabel.setFont(new Font("SansSerif", Font.BOLD, 22));
-        iconLabel.setForeground(TEAL);
+        JLabel iconBadge = new JLabel(" " + icon + " ");
+        iconBadge.setFont(new Font("SansSerif", Font.BOLD, 16));
+        iconBadge.setForeground(accentColor);
 
         JLabel titleLabel = new JLabel("  " + title);
         titleLabel.setFont(new Font("SansSerif", Font.BOLD, 13));
-        titleLabel.setForeground(NAVY);
+        titleLabel.setForeground(OCEAN_DARK);
 
-        cardHeader.add(iconLabel);
+        cardHeader.add(iconBadge);
         cardHeader.add(titleLabel);
 
         JTextArea descArea = new JTextArea(desc);
@@ -354,9 +408,28 @@ public class SinagApp extends JFrame {
         descArea.setForeground(TEXT_MUTED);
         descArea.setFont(new Font("SansSerif", Font.PLAIN, 12));
 
-        JButton openBtn = createStyledButton(buttonText + "  →", new Color(229, 244, 241));
-        openBtn.setForeground(TEAL);
+        JButton openBtn = createStyledButton(buttonText + "  →", TEAL_SOFT);
+        openBtn.setForeground(TEAL_PRIMARY);
         openBtn.addActionListener(e -> onClickAction.run());
+
+        MouseAdapter hoverEffect = new MouseAdapter() {
+            @Override
+            public void mouseEntered(MouseEvent e) {
+                card.setBorderColor(accentColor);
+                card.setFillColor(new Color(250, 253, 255));
+            }
+            @Override
+            public void mouseExited(MouseEvent e) {
+                card.setBorderColor(BORDER_LIGHT);
+                card.setFillColor(Color.WHITE);
+            }
+            @Override
+            public void mouseClicked(MouseEvent e) {
+                onClickAction.run();
+            }
+        };
+        card.addMouseListener(hoverEffect);
+        descArea.addMouseListener(hoverEffect);
 
         card.add(cardHeader, BorderLayout.NORTH);
         card.add(descArea, BorderLayout.CENTER);
@@ -366,184 +439,309 @@ public class SinagApp extends JFrame {
     }
 
     // =========================================================================
-    // 3. EDUCATIONAL CONTENT PAGE (Articles, Advisories, FAQs, Guides)
+    // 3. EDUCATIONAL CONTENT READER (Search + Category Filter + Image Display)
     // =========================================================================
 
     private void showContentPage(String contentType) {
-        String pageTitle;
-        if (contentType.equals("Article")) {
-            pageTitle = "Educational Articles";
-        } else if (contentType.equals("Advisory")) {
-            pageTitle = "Public Advisories";
-        } else if (contentType.equals("FAQ")) {
-            pageTitle = "Frequently Asked Questions";
-        } else {
-            pageTitle = "Preparedness Guides";
-        }
+        setActiveNav(contentType);
+        String pageTitle = switch (contentType) {
+            case "Article"  -> "Educational Articles";
+            case "Advisory" -> "Public Advisories";
+            case "FAQ"      -> "Frequently Asked Questions";
+            default         -> "Preparedness Guides";
+        };
 
-        JPanel page = createPageContainer(pageTitle, "Browse learning resources and practical preparedness information.");
-        JPanel body = new JPanel(new BorderLayout(12, 12));
+        JPanel page = createPageContainer(pageTitle, "Search by keyword or filter by topic to explore climate preparedness resources.");
+        JPanel body = new JPanel(new BorderLayout(12, 14));
         body.setOpaque(false);
 
-        // Search & Category filter bar
-        JPanel filterBar = new JPanel(new FlowLayout(FlowLayout.LEFT, 8, 4));
-        filterBar.setOpaque(false);
+        // Search & Filter Bar
+        RoundedPanel filterCard = new RoundedPanel(14, Color.WHITE, BORDER_LIGHT);
+        filterCard.setLayout(new FlowLayout(FlowLayout.LEFT, 10, 8));
+        filterCard.setBorder(new EmptyBorder(6, 12, 6, 12));
 
-        JTextField searchField = new JTextField(19);
+        JTextField searchField = new JTextField(20);
+        searchField.setFont(new Font("SansSerif", Font.PLAIN, 12));
+        searchField.setBorder(BorderFactory.createCompoundBorder(
+            BorderFactory.createLineBorder(BORDER_LIGHT),
+            new EmptyBorder(6, 8, 6, 8)
+        ));
+
         JComboBox<String> categoryBox = new JComboBox<>(new String[]{
             "All", "Basics", "Effects", "Water Conservation", "Heat Safety", "Preparedness", "Other"
         });
-        JButton searchBtn = createStyledButton("Search", TEAL);
+        categoryBox.setFont(new Font("SansSerif", Font.PLAIN, 12));
+        categoryBox.setBackground(Color.WHITE);
 
-        filterBar.add(createFieldLabel("Search"));
-        filterBar.add(searchField);
-        filterBar.add(createFieldLabel("Category"));
-        filterBar.add(categoryBox);
-        filterBar.add(searchBtn);
+        JButton searchBtn = createStyledButton("Search", TEAL_PRIMARY);
+        JButton resetBtn = createStyledButton("Reset", TEXT_MUTED);
 
-        // Left list of items
+        filterCard.add(createFieldLabel("Keyword"));
+        filterCard.add(searchField);
+        filterCard.add(createFieldLabel("Topic"));
+        filterCard.add(categoryBox);
+        filterCard.add(searchBtn);
+        filterCard.add(resetBtn);
+
+        // Left List of Records (sized so 2-line titles + category fit without clipping)
         DefaultListModel<Content> listModel = new DefaultListModel<>();
         JList<Content> itemList = new JList<>(listModel);
         itemList.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
-        itemList.setFixedCellHeight(48);
+        itemList.setFixedCellHeight(74);
         itemList.setBackground(Color.WHITE);
-        itemList.setFont(new Font("SansSerif", Font.PLAIN, 12));
-        itemList.setBorder(new EmptyBorder(5, 5, 5, 5));
 
         itemList.setCellRenderer((list, value, index, isSelected, cellHasFocus) -> {
-            JLabel row = new JLabel("<html><b>" + escapeHtml(value.getTitle()) + "</b><br>"
-                    + "<span style='color:#718292'>" + escapeHtml(value.getCategory()) + "</span></html>");
+            String imgIndicator = (value.getImagePath() != null && !value.getImagePath().isBlank()) ? "  [Image]" : "";
+            JLabel row = new JLabel("<html><div style='width:195px; padding:2px;'>"
+                    + "<b style='font-size:11px; color:#0F293A;'>" + escapeHtml(value.getTitle()) + "</b><br>"
+                    + "<span style='font-size:9px; color:#0D9488;'>● " + escapeHtml(value.getCategory()) + imgIndicator + "</span>"
+                    + "</div></html>");
             row.setOpaque(true);
-            row.setBorder(new EmptyBorder(8, 10, 8, 10));
-            row.setBackground(isSelected ? new Color(218, 241, 236) : Color.WHITE);
-            row.setForeground(NAVY);
+            row.setVerticalAlignment(SwingConstants.CENTER);
+            row.setBorder(BorderFactory.createCompoundBorder(
+                BorderFactory.createMatteBorder(0, isSelected ? 4 : 0, 1, 0, isSelected ? SOLAR_AMBER : BORDER_LIGHT),
+                new EmptyBorder(6, 10, 6, 10)
+            ));
+            row.setBackground(isSelected ? new Color(240, 253, 250) : Color.WHITE);
             return row;
         });
 
-        // Right reading pane
-        JTextArea readingPane = new JTextArea("Select an item from the list to read the complete information.");
+        // Right Reader Panel
+        JPanel readerCard = new JPanel(new BorderLayout(0, 12));
+        readerCard.setBackground(Color.WHITE);
+        readerCard.setBorder(BorderFactory.createCompoundBorder(
+            BorderFactory.createLineBorder(BORDER_LIGHT),
+            new EmptyBorder(20, 22, 20, 22)
+        ));
+
+        JLabel readerTitle = new JLabel("Select an item on the left to read");
+        readerTitle.setFont(new Font("SansSerif", Font.BOLD, 18));
+        readerTitle.setForeground(OCEAN_DARK);
+
+        JLabel readerMeta = new JLabel("Category  •  Published Date  •  Source");
+        readerMeta.setFont(new Font("SansSerif", Font.BOLD, 11));
+        readerMeta.setForeground(TEAL_PRIMARY);
+
+        JPanel readerHeader = new JPanel();
+        readerHeader.setOpaque(false);
+        readerHeader.setLayout(new BoxLayout(readerHeader, BoxLayout.Y_AXIS));
+        readerHeader.add(readerTitle);
+        readerHeader.add(Box.createVerticalStrut(4));
+        readerHeader.add(readerMeta);
+        readerHeader.add(Box.createVerticalStrut(10));
+        readerHeader.add(new JSeparator());
+
+        // Unified scrollable container for BOTH the image and the text
+        JPanel scrollableContent = new JPanel();
+        scrollableContent.setLayout(new BoxLayout(scrollableContent, BoxLayout.Y_AXIS));
+        scrollableContent.setBackground(Color.WHITE);
+
+        JLabel readerImageLabel = new JLabel();
+        readerImageLabel.setAlignmentX(Component.LEFT_ALIGNMENT);
+        readerImageLabel.setBorder(new EmptyBorder(4, 0, 14, 0));
+        readerImageLabel.setVisible(false);
+
+        JTextArea readingPane = new JTextArea("Choose any article, advisory, FAQ, or preparedness guide from the list to view its full details here.");
+        readingPane.setAlignmentX(Component.LEFT_ALIGNMENT);
         readingPane.setLineWrap(true);
         readingPane.setWrapStyleWord(true);
         readingPane.setEditable(false);
-        readingPane.setFont(new Font("SansSerif", Font.PLAIN, 13));
-        readingPane.setForeground(TEXT_DARK);
+        readingPane.setFont(new Font("SansSerif", Font.PLAIN, 14));
+        readingPane.setForeground(TEXT_MAIN);
         readingPane.setBackground(Color.WHITE);
-        readingPane.setBorder(new EmptyBorder(18, 18, 18, 18));
 
-        // Update reading pane when a user clicks an item
+        scrollableContent.add(readerImageLabel);
+        scrollableContent.add(readingPane);
+
+        JScrollPane contentScroll = new JScrollPane(scrollableContent);
+        contentScroll.setBorder(null);
+        contentScroll.getVerticalScrollBar().setUnitIncrement(16);
+
+        readerCard.add(readerHeader, BorderLayout.NORTH);
+        readerCard.add(contentScroll, BorderLayout.CENTER);
+
         itemList.addListSelectionListener(e -> {
             if (!e.getValueIsAdjusting() && itemList.getSelectedValue() != null) {
                 Content selected = itemList.getSelectedValue();
-                readingPane.setText(selected.displayContent()
-                        + "\n\nCATEGORY: " + selected.getCategory()
-                        + "\nPUBLISHED: " + selected.getPublishedDate()
-                        + "\nSOURCE: " + selected.getSource());
-                readingPane.setCaretPosition(0);
+                readerTitle.setText(selected.getTitle());
+                readerMeta.setText(selected.getCategory().toUpperCase()
+                        + "   |   Published: " + selected.getPublishedDate()
+                        + "   |   Source: " + selected.getSource());
+                readingPane.setText(selected.getBody());
+
+                // Display scaled image inside the scrollable area if available
+                String imgPath = selected.getImagePath();
+                if (imgPath != null && !imgPath.isBlank() && new File(imgPath).exists()) {
+                    ImageIcon rawIcon = new ImageIcon(imgPath);
+                    Image scaled = rawIcon.getImage().getScaledInstance(480, 230, Image.SCALE_SMOOTH);
+                    readerImageLabel.setIcon(new ImageIcon(scaled));
+                    readerImageLabel.setVisible(true);
+                } else {
+                    readerImageLabel.setIcon(null);
+                    readerImageLabel.setVisible(false);
+                }
+
+                // Reset scrollbar back to the top when opening a new item
+                SwingUtilities.invokeLater(() -> contentScroll.getVerticalScrollBar().setValue(0));
             }
         });
 
-        // Helper to load filtered items from SQLite
         Runnable reloadItems = () -> {
             listModel.clear();
+            readerImageLabel.setIcon(null);
+            readerImageLabel.setVisible(false);
             try {
-                String keyword = searchField.getText().trim();
-                String selectedCategory = (String) categoryBox.getSelectedItem();
-                List<Content> records = db.getContent(contentType, keyword, selectedCategory);
+                List<Content> records = db.getContent(contentType, searchField.getText().trim(), (String) categoryBox.getSelectedItem());
                 for (Content c : records) {
                     listModel.addElement(c);
+                }
+                if (!records.isEmpty()) {
+                    itemList.setSelectedIndex(0);
+                } else {
+                    readerTitle.setText("No matching records found");
+                    readerMeta.setText("Try clearing your search keyword or selecting 'All' topics");
+                    readingPane.setText("");
                 }
             } catch (SQLException ex) {
                 showError(ex);
             }
-            readingPane.setText("Select an item from the list to read the complete information.");
         };
 
         searchBtn.addActionListener(e -> reloadItems.run());
         searchField.addActionListener(e -> reloadItems.run());
         categoryBox.addActionListener(e -> reloadItems.run());
+        resetBtn.addActionListener(e -> {
+            searchField.setText("");
+            categoryBox.setSelectedIndex(0);
+            reloadItems.run();
+        });
 
         JScrollPane leftScroll = new JScrollPane(itemList);
-        JScrollPane rightScroll = new JScrollPane(readingPane);
-        leftScroll.setBorder(BorderFactory.createLineBorder(BORDER_COLOR));
-        rightScroll.setBorder(BorderFactory.createLineBorder(BORDER_COLOR));
+        leftScroll.setBorder(BorderFactory.createLineBorder(BORDER_LIGHT));
+        leftScroll.setHorizontalScrollBarPolicy(ScrollPaneConstants.HORIZONTAL_SCROLLBAR_NEVER);
+        leftScroll.setMinimumSize(new Dimension(265, 0));
 
-        JSplitPane splitPane = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT, leftScroll, rightScroll);
-        splitPane.setResizeWeight(0.38);
+        JSplitPane splitPane = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT, leftScroll, readerCard);
+        splitPane.setDividerLocation(275);
+        splitPane.setResizeWeight(0.30);
+        splitPane.setDividerSize(8);
         splitPane.setBorder(null);
 
-        body.add(filterBar, BorderLayout.NORTH);
+        body.add(filterCard, BorderLayout.NORTH);
         body.add(splitPane, BorderLayout.CENTER);
         page.add(body, BorderLayout.CENTER);
 
         reloadItems.run();
         switchMainPage(page);
     }
-
+    
     // =========================================================================
-    // 4. SINGLE-PLAYER QUIZ PAGE
+    // 4. INTERACTIVE SINGLE-PLAYER QUIZ (Progress Bar + Card Choices)
     // =========================================================================
 
     private void showQuiz() {
-        JPanel page = createPageContainer("Preparedness Quiz", "Test your knowledge of El Niño awareness and household readiness.");
-        JPanel wrapper = new JPanel(new BorderLayout(12, 15));
+        setActiveNav("Quiz");
+        JPanel page = createPageContainer("Preparedness Quiz", "Test your El Niño readiness knowledge with instant feedback and explanations.");
+        JPanel wrapper = new JPanel(new BorderLayout(12, 14));
         wrapper.setOpaque(false);
 
-        // Category selector + Start button
-        JPanel topControls = new JPanel(new FlowLayout(FlowLayout.LEFT, 8, 4));
-        topControls.setOpaque(false);
+        RoundedPanel topControls = new RoundedPanel(14, Color.WHITE, BORDER_LIGHT);
+        topControls.setLayout(new FlowLayout(FlowLayout.LEFT, 10, 8));
+        topControls.setBorder(new EmptyBorder(6, 12, 6, 12));
 
         JComboBox<String> categoryBox = new JComboBox<>(new String[]{
             "All", "Basics", "Effects", "Water Conservation", "Heat Safety", "Preparedness"
         });
-        JButton startBtn = createStyledButton("▶  Start Quiz", TEAL);
+        categoryBox.setFont(new Font("SansSerif", Font.PLAIN, 12));
+        categoryBox.setBackground(Color.WHITE);
 
-        topControls.add(createFieldLabel("Quiz category"));
+        JButton startBtn = createStyledButton("▶  Start Quiz", TEAL_PRIMARY);
+
+        topControls.add(createFieldLabel("Select Topic"));
         topControls.add(categoryBox);
         topControls.add(startBtn);
 
-        // Quiz card area
-        RoundedPanel quizCard = new RoundedPanel(18, Color.WHITE);
-        quizCard.setLayout(new BorderLayout(12, 15));
-        quizCard.setBorder(new EmptyBorder(22, 24, 22, 24));
+        RoundedPanel quizCard = new RoundedPanel(18, Color.WHITE, BORDER_LIGHT);
+        quizCard.setLayout(new BorderLayout(12, 16));
+        quizCard.setBorder(new EmptyBorder(24, 28, 24, 28));
+
+        JPanel progressHeader = new JPanel(new BorderLayout(0, 8));
+        progressHeader.setOpaque(false);
 
         JLabel progressLabel = new JLabel("READY WHEN YOU ARE");
         progressLabel.setFont(new Font("SansSerif", Font.BOLD, 12));
-        progressLabel.setForeground(TEAL);
+        progressLabel.setForeground(TEAL_PRIMARY);
 
-        JTextArea questionArea = new JTextArea("Choose a category, then press Start Quiz to begin.");
+        JProgressBar progressBar = new JProgressBar(0, 100);
+        progressBar.setValue(0);
+        progressBar.setForeground(SOLAR_AMBER);
+        progressBar.setBackground(new Color(226, 232, 240));
+        progressBar.setBorderPainted(false);
+        progressBar.setPreferredSize(new Dimension(0, 8));
+
+        progressHeader.add(progressLabel, BorderLayout.NORTH);
+        progressHeader.add(progressBar, BorderLayout.SOUTH);
+
+        JTextArea questionArea = new JTextArea("Choose a topic above, then click Start Quiz to begin.");
         questionArea.setLineWrap(true);
         questionArea.setWrapStyleWord(true);
         questionArea.setEditable(false);
         questionArea.setOpaque(false);
-        questionArea.setForeground(NAVY);
+        questionArea.setForeground(OCEAN_DARK);
         questionArea.setFont(new Font("SansSerif", Font.BOLD, 18));
 
-        JPanel choicesPanel = new JPanel(new GridLayout(4, 1, 8, 8));
+        JPanel choicesPanel = new JPanel(new GridLayout(4, 1, 10, 10));
         choicesPanel.setOpaque(false);
         ButtonGroup choiceGroup = new ButtonGroup();
         JRadioButton[] optionButtons = new JRadioButton[4];
 
         for (int i = 0; i < 4; i++) {
-            optionButtons[i] = new JRadioButton();
-            optionButtons[i].setFont(new Font("SansSerif", Font.PLAIN, 13));
-            optionButtons[i].setForeground(TEXT_DARK);
-            optionButtons[i].setBackground(new Color(246, 249, 251));
-            optionButtons[i].setBorder(new EmptyBorder(10, 12, 10, 12));
-            optionButtons[i].setOpaque(true);
-            optionButtons[i].setVisible(false);
-            choiceGroup.add(optionButtons[i]);
-            choicesPanel.add(optionButtons[i]);
+            JRadioButton radio = new JRadioButton();
+            radio.setFont(new Font("SansSerif", Font.PLAIN, 13));
+            radio.setForeground(TEXT_MAIN);
+            radio.setBackground(new Color(248, 250, 252));
+            radio.setBorder(BorderFactory.createCompoundBorder(
+                BorderFactory.createLineBorder(BORDER_LIGHT),
+                new EmptyBorder(10, 14, 10, 14)
+            ));
+            radio.setOpaque(true);
+            radio.setFocusPainted(false);
+            radio.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
+            radio.setVisible(false);
+
+            radio.addActionListener(e -> {
+                for (JRadioButton rb : optionButtons) {
+                    if (rb.isSelected()) {
+                        rb.setBackground(new Color(240, 253, 250));
+                        rb.setBorder(BorderFactory.createCompoundBorder(
+                            BorderFactory.createLineBorder(TEAL_PRIMARY, 2),
+                            new EmptyBorder(9, 13, 9, 13)
+                        ));
+                    } else {
+                        rb.setBackground(new Color(248, 250, 252));
+                        rb.setBorder(BorderFactory.createCompoundBorder(
+                            BorderFactory.createLineBorder(BORDER_LIGHT),
+                            new EmptyBorder(10, 14, 10, 14)
+                        ));
+                    }
+                }
+            });
+
+            optionButtons[i] = radio;
+            choiceGroup.add(radio);
+            choicesPanel.add(radio);
         }
 
         JTextArea feedbackArea = new JTextArea();
         feedbackArea.setLineWrap(true);
         feedbackArea.setWrapStyleWord(true);
         feedbackArea.setEditable(false);
-        feedbackArea.setOpaque(false);
-        feedbackArea.setForeground(TEAL);
-        feedbackArea.setFont(new Font("SansSerif", Font.PLAIN, 12));
+        feedbackArea.setOpaque(true);
+        feedbackArea.setBackground(Color.WHITE);
+        feedbackArea.setFont(new Font("SansSerif", Font.BOLD, 12));
+        feedbackArea.setBorder(new EmptyBorder(8, 12, 8, 12));
 
-        JButton submitOrNextBtn = createStyledButton("Submit answer", NAVY_LIGHT);
+        JButton submitOrNextBtn = createStyledButton("Submit Answer", OCEAN_DARK);
         submitOrNextBtn.setEnabled(false);
 
         JPanel questionBody = new JPanel(new BorderLayout(10, 14));
@@ -552,7 +750,7 @@ public class SinagApp extends JFrame {
         questionBody.add(choicesPanel, BorderLayout.CENTER);
         questionBody.add(feedbackArea, BorderLayout.SOUTH);
 
-        quizCard.add(progressLabel, BorderLayout.NORTH);
+        quizCard.add(progressHeader, BorderLayout.NORTH);
         quizCard.add(questionBody, BorderLayout.CENTER);
         quizCard.add(submitOrNextBtn, BorderLayout.SOUTH);
 
@@ -560,32 +758,27 @@ public class SinagApp extends JFrame {
         wrapper.add(quizCard, BorderLayout.CENTER);
         page.add(wrapper, BorderLayout.CENTER);
 
-        // Start Quiz button logic
         startBtn.addActionListener(e -> {
             try {
-                String selectedCategory = (String) categoryBox.getSelectedItem();
-                quizQuestions = db.getQuestions(selectedCategory);
+                quizQuestions = db.getQuestions((String) categoryBox.getSelectedItem());
                 currentQuestionIndex = 0;
                 quizScore = 0;
 
                 if (quizQuestions.isEmpty()) {
-                    JOptionPane.showMessageDialog(this, "No questions available for this category.");
+                    JOptionPane.showMessageDialog(this, "No questions available for this topic.");
                     return;
                 }
-                displayCurrentQuestion(progressLabel, questionArea, optionButtons, choiceGroup, feedbackArea, submitOrNextBtn);
+                displayCurrentQuestion(progressLabel, progressBar, questionArea, optionButtons, choiceGroup, feedbackArea, submitOrNextBtn);
             } catch (SQLException ex) {
                 showError(ex);
             }
         });
 
-        // Submit / Next Question button logic
         submitOrNextBtn.addActionListener(e -> {
             if (quizQuestions.isEmpty()) return;
-
             QuizQuestion currentQ = quizQuestions.get(currentQuestionIndex);
 
             if (!hasAnswered) {
-                // Step 1: Check selected radio button
                 String userAnswer = null;
                 for (int i = 0; i < 4; i++) {
                     if (optionButtons[i].isSelected()) {
@@ -594,38 +787,40 @@ public class SinagApp extends JFrame {
                 }
 
                 if (userAnswer == null) {
-                    JOptionPane.showMessageDialog(this, "Please select an answer.");
+                    JOptionPane.showMessageDialog(this, "Please select an answer first.");
                     return;
                 }
 
                 boolean isCorrect = currentQ.checkAnswer(userAnswer);
                 if (isCorrect) {
                     quizScore++;
-                    feedbackArea.setText("Correct! " + currentQ.getExplanation());
+                    feedbackArea.setBackground(new Color(220, 252, 231));
+                    feedbackArea.setForeground(new Color(22, 101, 52));
+                    feedbackArea.setText("✓ Correct! " + currentQ.getExplanation());
                 } else {
-                    feedbackArea.setText("Not quite. Correct answer: " + currentQ.getCorrect()
+                    feedbackArea.setBackground(new Color(254, 226, 226));
+                    feedbackArea.setForeground(new Color(153, 27, 27));
+                    feedbackArea.setText("✕ Not quite. Correct answer: " + currentQ.getCorrect()
                             + ". " + currentQ.getChoice(currentQ.getCorrect()) + ". " + currentQ.getExplanation());
                 }
 
                 hasAnswered = true;
-                if (currentQuestionIndex == quizQuestions.size() - 1) {
-                    submitOrNextBtn.setText("View result");
-                } else {
-                    submitOrNextBtn.setText("Next question");
-                }
+                submitOrNextBtn.setText(currentQuestionIndex == quizQuestions.size() - 1 ? "View Final Score" : "Next Question  →");
             } else {
-                // Step 2: Advance to next question or show final score
                 currentQuestionIndex++;
                 if (currentQuestionIndex >= quizQuestions.size()) {
-                    questionArea.setText("Quiz completed! Great work.");
-                    progressLabel.setText("FINAL SCORE: " + quizScore + " / " + quizQuestions.size());
+                    progressBar.setValue(100);
+                    progressLabel.setText("QUIZ COMPLETED  •  FINAL SCORE: " + quizScore + " / " + quizQuestions.size());
+                    questionArea.setText("Great work! You scored " + quizScore + " out of " + quizQuestions.size() + ".");
                     for (JRadioButton btn : optionButtons) {
                         btn.setVisible(false);
                     }
-                    feedbackArea.setText("Review the learning materials and try again to improve your score.");
+                    feedbackArea.setBackground(SOLAR_SOFT);
+                    feedbackArea.setForeground(SOLAR_TEXT);
+                    feedbackArea.setText("☀ Tip: Review the Educational Articles and Preparedness Guides, then click Start Quiz to try again!");
                     submitOrNextBtn.setEnabled(false);
                 } else {
-                    displayCurrentQuestion(progressLabel, questionArea, optionButtons, choiceGroup, feedbackArea, submitOrNextBtn);
+                    displayCurrentQuestion(progressLabel, progressBar, questionArea, optionButtons, choiceGroup, feedbackArea, submitOrNextBtn);
                 }
             }
         });
@@ -633,145 +828,248 @@ public class SinagApp extends JFrame {
         switchMainPage(page);
     }
 
-    private void displayCurrentQuestion(JLabel progressLabel, JTextArea questionArea, JRadioButton[] optionButtons,
-                                        ButtonGroup choiceGroup, JTextArea feedbackArea, JButton actionBtn) {
+    private void displayCurrentQuestion(JLabel progressLabel, JProgressBar progressBar, JTextArea questionArea,
+                                        JRadioButton[] optionButtons, ButtonGroup choiceGroup,
+                                        JTextArea feedbackArea, JButton actionBtn) {
         QuizQuestion q = quizQuestions.get(currentQuestionIndex);
-        progressLabel.setText("QUESTION " + (currentQuestionIndex + 1) + " OF " + quizQuestions.size() + "  •  SCORE: " + quizScore);
+        int percent = (int) (((double) currentQuestionIndex / quizQuestions.size()) * 100);
+        progressBar.setValue(percent);
+        progressLabel.setText("QUESTION " + (currentQuestionIndex + 1) + " OF " + quizQuestions.size() + "   •   CURRENT SCORE: " + quizScore);
         questionArea.setText(q.getQuestion());
 
         String[] choices = q.getChoices();
         for (int i = 0; i < 4; i++) {
-            optionButtons[i].setText((char) ('A' + i) + ".  " + choices[i]);
+            optionButtons[i].setText((char) ('A' + i) + ".   " + choices[i]);
+            optionButtons[i].setBackground(new Color(248, 250, 252));
+            optionButtons[i].setBorder(BorderFactory.createCompoundBorder(
+                BorderFactory.createLineBorder(BORDER_LIGHT),
+                new EmptyBorder(10, 14, 10, 14)
+            ));
             optionButtons[i].setVisible(true);
         }
 
         choiceGroup.clearSelection();
+        feedbackArea.setBackground(Color.WHITE);
         feedbackArea.setText("");
         hasAnswered = false;
-        actionBtn.setText("Submit answer");
+        actionBtn.setText("Submit Answer");
         actionBtn.setEnabled(true);
     }
 
     // =========================================================================
-    // 5. ABOUT PAGE & ADMIN PORTAL
+    // 5. ABOUT PAGE & FULL-PAGE ADMIN PORTAL
     // =========================================================================
 
     private void showAbout() {
-        JPanel page = createPageContainer("About SINAG", "Awareness • Readiness • Safety");
+        setActiveNav("About");
+        JPanel page = createPageContainer("About SINAG", "El Niño Awareness and Preparedness System");
+
+        RoundedPanel card = new RoundedPanel(18, Color.WHITE, BORDER_LIGHT);
+        card.setLayout(new BorderLayout(0, 14));
+        card.setBorder(new EmptyBorder(26, 28, 26, 28));
+
+        JLabel missionHeader = new JLabel("☀  System Objectives & Scope");
+        missionHeader.setFont(new Font("SansSerif", Font.BOLD, 17));
+        missionHeader.setForeground(OCEAN_DARK);
+
         JTextArea aboutText = new JTextArea(
-            "SINAG is an educational application designed to help users learn about El Niño, "
-            + "understand possible impacts, review preparedness guidance, and test their knowledge.\n\n"
-            + "The application provides educational content and sample advisories. It does not generate "
-            + "live weather forecasts and does not replace official government advisories, emergency services, "
-            + "or instructions from local authorities.\n\n"
-            + "Always verify time-sensitive weather information and public advisories with PAGASA and your LGU."
+            "SINAG is an educational desktop system designed to promote climate awareness, water conservation, "
+            + "and household preparedness during El Niño conditions.\n\n"
+            + "Core Capabilities:\n"
+            + "• Educational Content Library: Structured Articles, Public Advisories, FAQs, and Preparedness Guides with image support.\n"
+            + "• Keyword & Topic Search: Instant filtering to locate relevant heat-safety and water-saving guidance.\n"
+            + "• Interactive Single-Player Quiz: Self-paced readiness assessment with live scoring and explanations.\n"
+            + "• Administrator Management: Secure portal for updating educational materials, images, and quiz questions.\n\n"
+            + "Disclaimer: Always verify official weather warnings and community announcements with PAGASA and your Local Government Unit (LGU)."
         );
         aboutText.setWrapStyleWord(true);
         aboutText.setLineWrap(true);
         aboutText.setEditable(false);
         aboutText.setFont(new Font("SansSerif", Font.PLAIN, 14));
-        aboutText.setForeground(TEXT_DARK);
+        aboutText.setForeground(TEXT_MAIN);
         aboutText.setBackground(Color.WHITE);
-        aboutText.setBorder(new EmptyBorder(22, 22, 22, 22));
 
-        page.add(new JScrollPane(aboutText), BorderLayout.CENTER);
+        card.add(missionHeader, BorderLayout.NORTH);
+        card.add(new JScrollPane(aboutText), BorderLayout.CENTER);
+
+        page.add(card, BorderLayout.CENTER);
         switchMainPage(page);
     }
 
     private void openAdminLogin() {
+        JDialog loginDialog = new JDialog(this, "SINAG Administrator Login", true);
+        loginDialog.setSize(360, 220);
+        loginDialog.setLocationRelativeTo(this);
+        loginDialog.setLayout(new BorderLayout());
+
+        JPanel panel = new JPanel(new BorderLayout(10, 12));
+        panel.setBackground(Color.WHITE);
+        panel.setBorder(new EmptyBorder(18, 20, 18, 20));
+
+        JPanel fields = new JPanel(new GridLayout(2, 2, 8, 10));
+        fields.setOpaque(false);
         JTextField userField = new JTextField();
         JPasswordField passField = new JPasswordField();
+        fields.add(new JLabel("Username:"));
+        fields.add(userField);
+        fields.add(new JLabel("Password:"));
+        fields.add(passField);
 
-        JPanel loginForm = new JPanel(new GridLayout(2, 2, 8, 8));
-        loginForm.add(new JLabel("Username:"));
-        loginForm.add(userField);
-        loginForm.add(new JLabel("Password:"));
-        loginForm.add(passField);
+        JPanel buttons = new JPanel(new FlowLayout(FlowLayout.RIGHT, 8, 0));
+        buttons.setOpaque(false);
+        JButton cancelBtn = createStyledButton("Cancel", TEXT_MUTED);
+        JButton loginBtn = createStyledButton("Login", TEAL_PRIMARY);
 
-        int choice = JOptionPane.showConfirmDialog(this, loginForm, "SINAG Administrator Login",
-                JOptionPane.OK_CANCEL_OPTION, JOptionPane.PLAIN_MESSAGE);
-
-        if (choice == JOptionPane.OK_OPTION) {
-            String username = userField.getText();
-            String password = new String(passField.getPassword());
-
-            if (username.equals("admin") && password.equals("sinag123")) {
-                openAdminMenu();
+        Runnable attemptLogin = () -> {
+            if (userField.getText().trim().equals("admin") && new String(passField.getPassword()).equals("sinag123")) {
+                loginDialog.dispose();
+                showAdminDashboard();
             } else {
-                JOptionPane.showMessageDialog(this, "Invalid username or password.", "Login failed", JOptionPane.ERROR_MESSAGE);
+                JOptionPane.showMessageDialog(loginDialog, "Invalid username or password.", "Access Denied", JOptionPane.ERROR_MESSAGE);
             }
-        }
+        };
+
+        cancelBtn.addActionListener(e -> loginDialog.dispose());
+        loginBtn.addActionListener(e -> attemptLogin.run());
+        passField.addActionListener(e -> attemptLogin.run());
+
+        buttons.add(cancelBtn);
+        buttons.add(loginBtn);
+
+        panel.add(fields, BorderLayout.CENTER);
+        panel.add(buttons, BorderLayout.SOUTH);
+        loginDialog.add(panel);
+        loginDialog.setVisible(true);
     }
 
-    private void openAdminMenu() {
-        String[] options = {"Manage Content", "Manage Quiz Questions", "Close"};
-        int choice = JOptionPane.showOptionDialog(this, "Choose an administrator task.", "SINAG Admin Portal",
-                JOptionPane.DEFAULT_OPTION, JOptionPane.PLAIN_MESSAGE, null, options, options[0]);
+    private void showAdminDashboard() {
+        setActiveNav("");
+        JPanel page = createPageContainer("Administrator Portal", "Add, update, or remove educational content, images, and quiz questions.");
 
-        if (choice == 0) {
-            manageContent();
-        } else if (choice == 1) {
-            manageQuestions();
-        }
+        JPanel topBar = new JPanel(new FlowLayout(FlowLayout.RIGHT, 0, 0));
+        topBar.setOpaque(false);
+        JButton logoutBtn = createStyledButton("←  Exit Admin Portal", OCEAN_MID);
+        logoutBtn.addActionListener(e -> showHome());
+        topBar.add(logoutBtn);
+
+        JTabbedPane tabs = new JTabbedPane();
+        tabs.setFont(new Font("SansSerif", Font.BOLD, 12));
+        tabs.addTab("▤  Educational Content", createContentAdminTab());
+        tabs.addTab("★  Quiz Questions", createQuizAdminTab());
+
+        JPanel centerWrapper = new JPanel(new BorderLayout(0, 10));
+        centerWrapper.setOpaque(false);
+        centerWrapper.add(topBar, BorderLayout.NORTH);
+        centerWrapper.add(tabs, BorderLayout.CENTER);
+
+        page.add(centerWrapper, BorderLayout.CENTER);
+        switchMainPage(page);
     }
 
-    private void manageContent() {
-        try {
-            List<Content> items = db.getContent("All", "", "All");
-            String[] choices = new String[items.size() + 1];
-            for (int i = 0; i < items.size(); i++) {
-                Content c = items.get(i);
-                choices[i] = c.getId() + " | " + c.getType() + " | " + c.getTitle();
+    private JPanel createContentAdminTab() {
+        JPanel panel = new JPanel(new BorderLayout(10, 12));
+        panel.setBackground(Color.WHITE);
+        panel.setBorder(new EmptyBorder(16, 16, 16, 16));
+
+        String[] columns = {"ID", "Type", "Category", "Title", "Published Date", "Image"};
+        DefaultTableModel tableModel = new DefaultTableModel(columns, 0) {
+            @Override
+            public boolean isCellEditable(int row, int column) {
+                return false;
             }
-            choices[items.size()] = "Add New";
+        };
 
-            String selected = (String) JOptionPane.showInputDialog(this,
-                    "Select a record to edit/delete, or choose Add New:", "Content Management",
-                    JOptionPane.PLAIN_MESSAGE, null, choices, "Add New");
+        JTable table = styleModernTable(new JTable(tableModel));
+        table.getColumnModel().getColumn(0).setMaxWidth(50);
 
-            if (selected == null) return;
-            if (selected.equals("Add New")) {
-                openContentEditor(null);
+        List<Content> cachedList = new ArrayList<>();
+        Runnable refreshTable = () -> {
+            tableModel.setRowCount(0);
+            cachedList.clear();
+            try {
+                cachedList.addAll(db.getContent("All", "", "All"));
+                for (Content c : cachedList) {
+                    String imgStatus = (c.getImagePath() == null || c.getImagePath().isBlank()) ? "None" : "Attached";
+                    tableModel.addRow(new Object[]{
+                        c.getId(), c.getType(), c.getCategory(), c.getTitle(), c.getPublishedDate(), imgStatus
+                    });
+                }
+            } catch (SQLException ex) {
+                showError(ex);
+            }
+        };
+
+        JPanel actions = new JPanel(new FlowLayout(FlowLayout.LEFT, 8, 0));
+        actions.setOpaque(false);
+
+        JButton addBtn = createStyledButton("+ Add Content", TEAL_PRIMARY);
+        JButton editBtn = createStyledButton("✎ Edit Selected", OCEAN_MID);
+        JButton deleteBtn = createStyledButton("✕ Delete Selected", new Color(220, 38, 38));
+
+        addBtn.addActionListener(e -> {
+            if (openContentEditor(null)) refreshTable.run();
+        });
+
+        editBtn.addActionListener(e -> {
+            int row = table.getSelectedRow();
+            if (row == -1) {
+                JOptionPane.showMessageDialog(this, "Select a content row from the table first.");
                 return;
             }
+            if (openContentEditor(cachedList.get(row))) refreshTable.run();
+        });
 
-            int id = Integer.parseInt(selected.substring(0, selected.indexOf(" |")));
-            Content chosen = null;
-            for (Content c : items) {
-                if (c.getId() == id) {
-                    chosen = c;
-                    break;
+        deleteBtn.addActionListener(e -> {
+            int row = table.getSelectedRow();
+            if (row == -1) {
+                JOptionPane.showMessageDialog(this, "Select a content row to delete.");
+                return;
+            }
+            Content selected = cachedList.get(row);
+            int confirm = JOptionPane.showConfirmDialog(this,
+                    "Delete \"" + selected.getTitle() + "\"?", "Confirm Delete", JOptionPane.YES_NO_OPTION);
+            if (confirm == JOptionPane.YES_OPTION) {
+                try {
+                    db.deleteContent(selected.getId());
+                    refreshTable.run();
+                } catch (SQLException ex) {
+                    showError(ex);
                 }
             }
+        });
 
-            Object[] actions = {"Edit", "Delete", "Cancel"};
-            int action = JOptionPane.showOptionDialog(this, "Record: " + selected, "Manage Record",
-                    JOptionPane.DEFAULT_OPTION, JOptionPane.QUESTION_MESSAGE, null, actions, actions[0]);
+        actions.add(addBtn);
+        actions.add(editBtn);
+        actions.add(deleteBtn);
 
-            if (action == 0) {
-                openContentEditor(chosen);
-            } else if (action == 1) {
-                int confirm = JOptionPane.showConfirmDialog(this, "Delete this record?", "Confirm", JOptionPane.YES_NO_OPTION);
-                if (confirm == JOptionPane.YES_OPTION) {
-                    db.deleteContent(id);
-                    JOptionPane.showMessageDialog(this, "Deleted.");
-                }
-            }
-        } catch (Exception ex) {
-            showError(ex);
-        }
+        panel.add(actions, BorderLayout.NORTH);
+        panel.add(new JScrollPane(table), BorderLayout.CENTER);
+
+        refreshTable.run();
+        return panel;
     }
 
-    private void openContentEditor(Content existing) {
-        JTextField titleField = new JTextField(existing == null ? "" : existing.getTitle());
-        JTextArea bodyArea = new JTextArea(existing == null ? "" : existing.getBody(), 7, 28);
-        bodyArea.setLineWrap(true);
-        bodyArea.setWrapStyleWord(true);
+    private boolean openContentEditor(Content existing) {
+        final boolean[] isSaved = {false};
+        final String[] chosenImagePath = {existing == null ? "" : existing.getImagePath()};
+
+        JDialog dialog = new JDialog(this, existing == null ? "Add New Content" : "Edit Content", true);
+        dialog.setSize(540, 540);
+        dialog.setLocationRelativeTo(this);
+        dialog.setLayout(new BorderLayout());
+
+        JPanel container = new JPanel(new BorderLayout(10, 12));
+        container.setBorder(new EmptyBorder(18, 20, 18, 20));
+        container.setBackground(Color.WHITE);
+
+        JPanel topFields = new JPanel(new GridLayout(0, 2, 10, 8));
+        topFields.setOpaque(false);
 
         JComboBox<String> typeBox = new JComboBox<>(new String[]{"Article", "Advisory", "FAQ", "Guide"});
         JComboBox<String> categoryBox = new JComboBox<>(new String[]{
             "Basics", "Effects", "Water Conservation", "Heat Safety", "Preparedness", "Other"
         });
+        JTextField titleField = new JTextField(existing == null ? "" : existing.getTitle());
         JTextField sourceField = new JTextField(existing == null ? "" : existing.getSource());
         JTextField dateField = new JTextField(existing == null ? LocalDate.now().toString() : existing.getPublishedDate());
 
@@ -780,128 +1078,305 @@ public class SinagApp extends JFrame {
             categoryBox.setSelectedItem(existing.getCategory());
         }
 
-        JPanel form = new JPanel(new GridLayout(0, 1, 5, 5));
-        form.add(new JLabel("Content type"));
-        form.add(typeBox);
-        form.add(new JLabel("Title"));
-        form.add(titleField);
-        form.add(new JLabel("Body"));
-        form.add(new JScrollPane(bodyArea));
-        form.add(new JLabel("Category"));
-        form.add(categoryBox);
-        form.add(new JLabel("Source"));
-        form.add(sourceField);
-        form.add(new JLabel("Publication date (YYYY-MM-DD)"));
-        form.add(dateField);
+        // Native Windows File Explorer picker row
+        JPanel imagePickerRow = new JPanel(new BorderLayout(6, 0));
+        imagePickerRow.setOpaque(false);
+        JLabel fileStatusLabel = new JLabel(chosenImagePath[0].isBlank() ? "No image" : new File(chosenImagePath[0]).getName());
+        fileStatusLabel.setFont(new Font("SansSerif", Font.ITALIC, 11));
+        fileStatusLabel.setForeground(TEXT_MUTED);
 
-        int result = JOptionPane.showConfirmDialog(this, form, existing == null ? "Add Content" : "Edit Content",
-                JOptionPane.OK_CANCEL_OPTION, JOptionPane.PLAIN_MESSAGE);
+        JButton uploadBtn = createStyledButton("Browse...", OCEAN_MID);
+        uploadBtn.addActionListener(e -> {
+            // Opens the native Windows File Manager
+            FileDialog fileDialog = new FileDialog(dialog, "Select Image", FileDialog.LOAD);
+            fileDialog.setFile("*.jpg;*.jpeg;*.png;*.gif");
+            fileDialog.setVisible(true);
 
-        if (result == JOptionPane.OK_OPTION) {
+            String dir = fileDialog.getDirectory();
+            String file = fileDialog.getFile();
+
+            if (dir != null && file != null) {
+                File sourceFile = new File(dir, file);
+                try {
+                    File imagesDir = new File(System.getProperty("user.dir"), "images");
+                    if (!imagesDir.exists()) {
+                        imagesDir.mkdirs();
+                    }
+                    File destFile = new File(imagesDir, System.currentTimeMillis() + "_" + sourceFile.getName());
+                    try (var in = new java.io.FileInputStream(sourceFile);
+                         var out = new java.io.FileOutputStream(destFile)) {
+                        in.transferTo(out);
+                    }
+                    chosenImagePath[0] = destFile.getAbsolutePath();
+                } catch (Exception copyEx) {
+                    // Fallback: use the original file location directly so upload never fails
+                    chosenImagePath[0] = sourceFile.getAbsolutePath();
+                }
+                fileStatusLabel.setText(sourceFile.getName());
+            }
+        });
+
+        imagePickerRow.add(uploadBtn, BorderLayout.WEST);
+        imagePickerRow.add(fileStatusLabel, BorderLayout.CENTER);
+
+        topFields.add(new JLabel("Content Type:")); topFields.add(typeBox);
+        topFields.add(new JLabel("Category:")); topFields.add(categoryBox);
+        topFields.add(new JLabel("Title:")); topFields.add(titleField);
+        topFields.add(new JLabel("Source:")); topFields.add(sourceField);
+        topFields.add(new JLabel("Date (YYYY-MM-DD):")); topFields.add(dateField);
+        topFields.add(new JLabel("Image (Optional):")); topFields.add(imagePickerRow);
+
+        JPanel bodyWrapper = new JPanel(new BorderLayout(0, 6));
+        bodyWrapper.setOpaque(false);
+        bodyWrapper.add(new JLabel("Body / Full Text:"), BorderLayout.NORTH);
+
+        JTextArea bodyArea = new JTextArea(existing == null ? "" : existing.getBody());
+        bodyArea.setLineWrap(true);
+        bodyArea.setWrapStyleWord(true);
+        bodyArea.setFont(new Font("SansSerif", Font.PLAIN, 13));
+        bodyArea.setBorder(new EmptyBorder(8, 8, 8, 8));
+
+        JScrollPane bodyScroll = new JScrollPane(bodyArea);
+        bodyScroll.setBorder(BorderFactory.createLineBorder(BORDER_LIGHT));
+        bodyWrapper.add(bodyScroll, BorderLayout.CENTER);
+
+        JPanel buttonBar = new JPanel(new FlowLayout(FlowLayout.RIGHT, 8, 0));
+        buttonBar.setOpaque(false);
+        JButton cancelBtn = createStyledButton("Cancel", TEXT_MUTED);
+        JButton saveBtn = createStyledButton("Save Content", TEAL_PRIMARY);
+
+        cancelBtn.addActionListener(e -> dialog.dispose());
+        saveBtn.addActionListener(e -> {
             if (titleField.getText().isBlank() || bodyArea.getText().isBlank()) {
-                JOptionPane.showMessageDialog(this, "Title and body are required.");
+                JOptionPane.showMessageDialog(dialog, "Title and body are required.");
                 return;
             }
             try {
                 if (existing == null) {
                     db.addContent((String) typeBox.getSelectedItem(), titleField.getText().trim(),
                             bodyArea.getText().trim(), (String) categoryBox.getSelectedItem(),
-                            sourceField.getText().trim(), dateField.getText().trim());
+                            sourceField.getText().trim(), dateField.getText().trim(), chosenImagePath[0]);
                 } else {
                     db.updateContent(existing.getId(), (String) typeBox.getSelectedItem(), titleField.getText().trim(),
                             bodyArea.getText().trim(), (String) categoryBox.getSelectedItem(),
-                            sourceField.getText().trim(), dateField.getText().trim());
+                            sourceField.getText().trim(), dateField.getText().trim(), chosenImagePath[0]);
                 }
-                JOptionPane.showMessageDialog(this, "Content saved successfully.");
+                isSaved[0] = true;
+                dialog.dispose();
             } catch (SQLException ex) {
                 showError(ex);
             }
-        }
+        });
+
+        buttonBar.add(cancelBtn);
+        buttonBar.add(saveBtn);
+
+        container.add(topFields, BorderLayout.NORTH);
+        container.add(bodyWrapper, BorderLayout.CENTER);
+        container.add(buttonBar, BorderLayout.SOUTH);
+
+        dialog.add(container);
+        dialog.setVisible(true);
+        return isSaved[0];
     }
 
-    private void manageQuestions() {
-        try {
-            List<QuizQuestion> questions = db.getQuestions("All");
-            String[] choices = new String[questions.size() + 1];
-            for (int i = 0; i < questions.size(); i++) {
-                QuizQuestion q = questions.get(i);
-                choices[i] = q.getId() + " | " + q.getCategory() + " | " + q.getQuestion();
+    private JPanel createQuizAdminTab() {
+        JPanel panel = new JPanel(new BorderLayout(10, 12));
+        panel.setBackground(Color.WHITE);
+        panel.setBorder(new EmptyBorder(16, 16, 16, 16));
+
+        String[] columns = {"ID", "Category", "Question", "Correct Answer"};
+        DefaultTableModel tableModel = new DefaultTableModel(columns, 0) {
+            @Override
+            public boolean isCellEditable(int row, int column) {
+                return false;
             }
-            choices[questions.size()] = "Add New";
+        };
 
-            String selected = (String) JOptionPane.showInputDialog(this,
-                    "Select a question to delete, or choose Add New:", "Quiz Management",
-                    JOptionPane.PLAIN_MESSAGE, null, choices, "Add New");
+        JTable table = styleModernTable(new JTable(tableModel));
+        table.getColumnModel().getColumn(0).setMaxWidth(50);
+        table.getColumnModel().getColumn(3).setMaxWidth(120);
 
-            if (selected == null) return;
-            if (selected.equals("Add New")) {
-                openQuestionEditor();
-                return;
-            }
-
-            int id = Integer.parseInt(selected.substring(0, selected.indexOf(" |")));
-            int confirm = JOptionPane.showConfirmDialog(this, "Delete selected question?", "Confirm", JOptionPane.YES_NO_OPTION);
-            if (confirm == JOptionPane.YES_OPTION) {
-                db.deleteQuestion(id);
-                JOptionPane.showMessageDialog(this, "Question deleted.");
-            }
-        } catch (Exception ex) {
-            showError(ex);
-        }
-    }
-
-    private void openQuestionEditor() {
-        JTextField categoryField = new JTextField("Basics");
-        JTextField questionField = new JTextField();
-        JTextField choiceA = new JTextField();
-        JTextField choiceB = new JTextField();
-        JTextField choiceC = new JTextField();
-        JTextField choiceD = new JTextField();
-        JTextField correctField = new JTextField("A");
-        JTextField explanationField = new JTextField();
-
-        JPanel form = new JPanel(new GridLayout(0, 1, 4, 4));
-        form.add(new JLabel("Category")); form.add(categoryField);
-        form.add(new JLabel("Question")); form.add(questionField);
-        form.add(new JLabel("Choice A")); form.add(choiceA);
-        form.add(new JLabel("Choice B")); form.add(choiceB);
-        form.add(new JLabel("Choice C")); form.add(choiceC);
-        form.add(new JLabel("Choice D")); form.add(choiceD);
-        form.add(new JLabel("Correct answer (A/B/C/D)")); form.add(correctField);
-        form.add(new JLabel("Explanation")); form.add(explanationField);
-
-        int result = JOptionPane.showConfirmDialog(this, form, "Add Quiz Question", JOptionPane.OK_CANCEL_OPTION);
-        if (result == JOptionPane.OK_OPTION) {
-            String correctLetter = correctField.getText().trim().toUpperCase();
-            boolean validAnswer = Arrays.asList("A", "B", "C", "D").contains(correctLetter);
-
-            if (questionField.getText().isBlank() || choiceA.getText().isBlank() || choiceB.getText().isBlank()
-                    || choiceC.getText().isBlank() || choiceD.getText().isBlank() || explanationField.getText().isBlank()
-                    || !validAnswer) {
-                JOptionPane.showMessageDialog(this, "Complete all fields and enter A, B, C, or D as the answer.");
-                return;
-            }
-
+        List<QuizQuestion> cachedQuestions = new ArrayList<>();
+        Runnable refreshTable = () -> {
+            tableModel.setRowCount(0);
+            cachedQuestions.clear();
             try {
-                db.addQuestion(categoryField.getText().trim(), questionField.getText().trim(),
-                        choiceA.getText().trim(), choiceB.getText().trim(),
-                        choiceC.getText().trim(), choiceD.getText().trim(),
-                        correctLetter, explanationField.getText().trim());
-                JOptionPane.showMessageDialog(this, "Question added.");
+                cachedQuestions.addAll(db.getQuestions("All"));
+                for (QuizQuestion q : cachedQuestions) {
+                    tableModel.addRow(new Object[]{
+                        q.getId(), q.getCategory(), q.getQuestion(), q.getCorrect()
+                    });
+                }
             } catch (SQLException ex) {
                 showError(ex);
             }
-        }
+        };
+
+        JPanel actions = new JPanel(new FlowLayout(FlowLayout.LEFT, 8, 0));
+        actions.setOpaque(false);
+
+        JButton addBtn = createStyledButton("+ Add Question", TEAL_PRIMARY);
+        JButton editBtn = createStyledButton("✎ Edit Selected", OCEAN_MID);
+        JButton deleteBtn = createStyledButton("✕ Delete Selected", new Color(220, 38, 38));
+
+        addBtn.addActionListener(e -> {
+            if (openQuestionEditor(null)) refreshTable.run();
+        });
+
+        editBtn.addActionListener(e -> {
+            int row = table.getSelectedRow();
+            if (row == -1) {
+                JOptionPane.showMessageDialog(this, "Select a question row from the table first.");
+                return;
+            }
+            if (openQuestionEditor(cachedQuestions.get(row))) refreshTable.run();
+        });
+
+        deleteBtn.addActionListener(e -> {
+            int row = table.getSelectedRow();
+            if (row == -1) {
+                JOptionPane.showMessageDialog(this, "Select a question row to delete.");
+                return;
+            }
+            QuizQuestion selected = cachedQuestions.get(row);
+            int confirm = JOptionPane.showConfirmDialog(this,
+                    "Delete this question?", "Confirm Delete", JOptionPane.YES_NO_OPTION);
+            if (confirm == JOptionPane.YES_OPTION) {
+                try {
+                    db.deleteQuestion(selected.getId());
+                    refreshTable.run();
+                } catch (SQLException ex) {
+                    showError(ex);
+                }
+            }
+        });
+
+        actions.add(addBtn);
+        actions.add(editBtn);
+        actions.add(deleteBtn);
+
+        panel.add(actions, BorderLayout.NORTH);
+        panel.add(new JScrollPane(table), BorderLayout.CENTER);
+
+        refreshTable.run();
+        return panel;
+    }
+
+    private boolean openQuestionEditor(QuizQuestion existing) {
+        final boolean[] isSaved = {false};
+        String[] choices = existing == null ? new String[]{"", "", "", ""} : existing.getChoices();
+
+        JDialog dialog = new JDialog(this, existing == null ? "Add Quiz Question" : "Edit Quiz Question", true);
+        dialog.setSize(520, 480);
+        dialog.setLocationRelativeTo(this);
+        dialog.setLayout(new BorderLayout());
+
+        JPanel container = new JPanel(new BorderLayout(10, 12));
+        container.setBorder(new EmptyBorder(18, 20, 18, 20));
+        container.setBackground(Color.WHITE);
+
+        JPanel fields = new JPanel(new GridLayout(0, 2, 10, 8));
+        fields.setOpaque(false);
+
+        JComboBox<String> categoryBox = new JComboBox<>(new String[]{
+            "Basics", "Effects", "Water Conservation", "Heat Safety", "Preparedness"
+        });
+        if (existing != null) categoryBox.setSelectedItem(existing.getCategory());
+
+        JTextField questionField = new JTextField(existing == null ? "" : existing.getQuestion());
+        JTextField choiceA = new JTextField(choices[0]);
+        JTextField choiceB = new JTextField(choices[1]);
+        JTextField choiceC = new JTextField(choices[2]);
+        JTextField choiceD = new JTextField(choices[3]);
+        JComboBox<String> correctBox = new JComboBox<>(new String[]{"A", "B", "C", "D"});
+        if (existing != null) correctBox.setSelectedItem(existing.getCorrect());
+        JTextField explanationField = new JTextField(existing == null ? "" : existing.getExplanation());
+
+        fields.add(new JLabel("Category:")); fields.add(categoryBox);
+        fields.add(new JLabel("Question:")); fields.add(questionField);
+        fields.add(new JLabel("Choice A:")); fields.add(choiceA);
+        fields.add(new JLabel("Choice B:")); fields.add(choiceB);
+        fields.add(new JLabel("Choice C:")); fields.add(choiceC);
+        fields.add(new JLabel("Choice D:")); fields.add(choiceD);
+        fields.add(new JLabel("Correct Answer:")); fields.add(correctBox);
+        fields.add(new JLabel("Explanation:")); fields.add(explanationField);
+
+        JPanel buttonBar = new JPanel(new FlowLayout(FlowLayout.RIGHT, 8, 0));
+        buttonBar.setOpaque(false);
+        JButton cancelBtn = createStyledButton("Cancel", TEXT_MUTED);
+        JButton saveBtn = createStyledButton("Save Question", TEAL_PRIMARY);
+
+        cancelBtn.addActionListener(e -> dialog.dispose());
+        saveBtn.addActionListener(e -> {
+            if (questionField.getText().isBlank() || choiceA.getText().isBlank() || choiceB.getText().isBlank()
+                    || choiceC.getText().isBlank() || choiceD.getText().isBlank() || explanationField.getText().isBlank()) {
+                JOptionPane.showMessageDialog(dialog, "Please complete all fields.");
+                return;
+            }
+            try {
+                if (existing == null) {
+                    db.addQuestion((String) categoryBox.getSelectedItem(), questionField.getText().trim(),
+                            choiceA.getText().trim(), choiceB.getText().trim(),
+                            choiceC.getText().trim(), choiceD.getText().trim(),
+                            (String) correctBox.getSelectedItem(), explanationField.getText().trim());
+                } else {
+                    db.updateQuestion(existing.getId(), (String) categoryBox.getSelectedItem(), questionField.getText().trim(),
+                            choiceA.getText().trim(), choiceB.getText().trim(),
+                            choiceC.getText().trim(), choiceD.getText().trim(),
+                            (String) correctBox.getSelectedItem(), explanationField.getText().trim());
+                }
+                isSaved[0] = true;
+                dialog.dispose();
+            } catch (SQLException ex) {
+                showError(ex);
+            }
+        });
+
+        buttonBar.add(cancelBtn);
+        buttonBar.add(saveBtn);
+
+        container.add(fields, BorderLayout.CENTER);
+        container.add(buttonBar, BorderLayout.SOUTH);
+
+        dialog.add(container);
+        dialog.setVisible(true);
+        return isSaved[0];
     }
 
     // =========================================================================
-    // 6. HELPER UI METHODS & CUSTOM PANELS
+    // 6. UI HELPERS & CUSTOM GRAPHICS COMPONENTS
     // =========================================================================
+
+    private JTable styleModernTable(JTable table) {
+        table.setRowHeight(30);
+        table.setFont(new Font("SansSerif", Font.PLAIN, 12));
+        table.setGridColor(BORDER_LIGHT);
+        table.setSelectionBackground(new Color(204, 244, 237));
+        table.setSelectionForeground(OCEAN_DARK);
+        table.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
+        table.getTableHeader().setFont(new Font("SansSerif", Font.BOLD, 12));
+        table.getTableHeader().setBackground(SIDEBAR_BG);
+        table.getTableHeader().setForeground(OCEAN_DARK);
+
+        table.setDefaultRenderer(Object.class, new DefaultTableCellRenderer() {
+            @Override
+            public Component getTableCellRendererComponent(JTable t, Object val, boolean sel, boolean focus, int row, int col) {
+                Component c = super.getTableCellRendererComponent(t, val, sel, focus, row, col);
+                if (!sel) {
+                    c.setBackground(row % 2 == 0 ? Color.WHITE : new Color(248, 250, 252));
+                }
+                setBorder(new EmptyBorder(0, 8, 0, 8));
+                return c;
+            }
+        });
+        return table;
+    }
 
     private JPanel createPageContainer(String title, String subtitle) {
-        JPanel page = new JPanel(new BorderLayout(12, 18));
-        page.setBackground(BACKGROUND);
-        page.setBorder(new EmptyBorder(26, 28, 25, 28));
+        JPanel page = new JPanel(new BorderLayout(12, 16));
+        page.setBackground(BG_CANVAS);
+        page.setBorder(new EmptyBorder(24, 28, 22, 28));
 
         JPanel header = new JPanel();
         header.setOpaque(false);
@@ -909,14 +1384,14 @@ public class SinagApp extends JFrame {
 
         JLabel titleLabel = new JLabel(title);
         titleLabel.setFont(new Font("SansSerif", Font.BOLD, 23));
-        titleLabel.setForeground(NAVY);
+        titleLabel.setForeground(OCEAN_DARK);
 
         JLabel subLabel = new JLabel(subtitle);
         subLabel.setFont(new Font("SansSerif", Font.PLAIN, 12));
         subLabel.setForeground(TEXT_MUTED);
 
         header.add(titleLabel);
-        header.add(Box.createVerticalStrut(6));
+        header.add(Box.createVerticalStrut(4));
         header.add(subLabel);
         page.add(header, BorderLayout.NORTH);
 
@@ -926,7 +1401,7 @@ public class SinagApp extends JFrame {
     private JLabel createFieldLabel(String text) {
         JLabel label = new JLabel(text + ":");
         label.setFont(new Font("SansSerif", Font.BOLD, 11));
-        label.setForeground(NAVY);
+        label.setForeground(OCEAN_DARK);
         return label;
     }
 
@@ -935,10 +1410,10 @@ public class SinagApp extends JFrame {
         btn.setFont(new Font("SansSerif", Font.BOLD, 11));
         btn.setForeground(Color.WHITE);
         btn.setBackground(bgColor);
-        btn.setOpaque(true);              // Forces custom background color to show
-        btn.setBorderPainted(false);      // Prevents Windows default white border/fill
+        btn.setOpaque(true);
+        btn.setBorderPainted(false);
         btn.setFocusPainted(false);
-        btn.setBorder(new EmptyBorder(10, 15, 10, 15));
+        btn.setBorder(new EmptyBorder(9, 15, 9, 15));
         btn.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
         return btn;
     }
@@ -960,15 +1435,26 @@ public class SinagApp extends JFrame {
         e.printStackTrace();
     }
 
-    // Draws a white card with smooth rounded corners
     private static class RoundedPanel extends JPanel {
         private final int cornerRadius;
-        private final Color fillColor;
+        private Color fillColor;
+        private Color borderColor;
 
-        RoundedPanel(int cornerRadius, Color fillColor) {
+        RoundedPanel(int cornerRadius, Color fillColor, Color borderColor) {
             this.cornerRadius = cornerRadius;
             this.fillColor = fillColor;
+            this.borderColor = borderColor;
             setOpaque(false);
+        }
+
+        public void setFillColor(Color fillColor) {
+            this.fillColor = fillColor;
+            repaint();
+        }
+
+        public void setBorderColor(Color borderColor) {
+            this.borderColor = borderColor;
+            repaint();
         }
 
         @Override
@@ -976,13 +1462,14 @@ public class SinagApp extends JFrame {
             Graphics2D g2 = (Graphics2D) g.create();
             g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
             g2.setColor(fillColor);
-            g2.fillRoundRect(0, 0, getWidth(), getHeight(), cornerRadius, cornerRadius);
+            g2.fillRoundRect(0, 0, getWidth() - 1, getHeight() - 1, cornerRadius, cornerRadius);
+            g2.setColor(borderColor);
+            g2.drawRoundRect(0, 0, getWidth() - 1, getHeight() - 1, cornerRadius, cornerRadius);
             g2.dispose();
             super.paintComponent(g);
         }
     }
 
-    // Draws the teal-to-navy gradient banner on the Home screen
     private static class GradientPanel extends JPanel {
         GradientPanel() {
             setOpaque(false);
@@ -992,8 +1479,15 @@ public class SinagApp extends JFrame {
         protected void paintComponent(Graphics g) {
             Graphics2D g2 = (Graphics2D) g.create();
             g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
-            g2.setPaint(new GradientPaint(0, 0, new Color(0, 119, 116), getWidth(), getHeight(), new Color(25, 73, 103)));
-            g2.fillRoundRect(0, 0, getWidth(), getHeight(), 22, 22);
+            g2.setPaint(new GradientPaint(0, 0, new Color(13, 115, 119), getWidth(), getHeight(), new Color(15, 41, 58)));
+            g2.fillRoundRect(0, 0, getWidth(), getHeight(), 20, 20);
+
+            g2.setPaint(new RadialGradientPaint(
+                new Point(getWidth() - 60, 30), 180f,
+                new float[]{0f, 1f},
+                new Color[]{new Color(245, 158, 11, 85), new Color(245, 158, 11, 0)}
+            ));
+            g2.fillRoundRect(0, 0, getWidth(), getHeight(), 20, 20);
             g2.dispose();
             super.paintComponent(g);
         }
@@ -1002,7 +1496,7 @@ public class SinagApp extends JFrame {
     public static void main(String[] args) {
         SwingUtilities.invokeLater(() -> {
             try {
-                UIManager.setLookAndFeel(UIManager.getSystemLookAndFeelClassName());
+                UIManager.setLookAndFeel(UIManager.getCrossPlatformLookAndFeelClassName());
             } catch (Exception ignored) {
             }
             try {

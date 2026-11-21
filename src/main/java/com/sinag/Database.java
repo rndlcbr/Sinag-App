@@ -1,5 +1,6 @@
 package com.sinag;
 
+import java.io.File;
 import java.sql.*;
 import java.util.ArrayList;
 import java.util.List;
@@ -9,7 +10,9 @@ import java.util.List;
  * and performing Create, Read, Update, Delete actions).
  */
 public class Database {
-    private static final String DB_URL = "jdbc:sqlite:sinag.db";
+    // Store database in user's home directory so Windows never blocks file creation
+    private static final String DB_FOLDER = System.getProperty("user.home") + File.separator + "SINAG_Data";
+    private static final String DB_URL = "jdbc:sqlite:" + DB_FOLDER + File.separator + "sinag.db";
 
     public Database() {
         try {
@@ -26,9 +29,17 @@ public class Database {
                         body TEXT NOT NULL,
                         category TEXT,
                         source TEXT,
-                        published_date TEXT
+                        published_date TEXT,
+                        image_path TEXT DEFAULT ''
                     )
                 """);
+
+                // Safely add image_path column if upgrading an older database file
+                try {
+                    stmt.executeUpdate("ALTER TABLE content ADD COLUMN image_path TEXT DEFAULT ''");
+                } catch (SQLException ignored) {
+                    // Column already exists
+                }
 
                 // Create the quiz questions table
                 stmt.executeUpdate("""
@@ -50,15 +61,19 @@ public class Database {
             }
         } catch (ClassNotFoundException e) {
             throw new RuntimeException(
-                "SQLite Driver missing! Make sure you opened the 'SINAG_Java_Project' folder (with pom.xml) in VS Code, " +
+                "SQLite Driver missing! Make sure you opened the 'Sinag-App' folder (with pom.xml) in VS Code, " +
                 "or added sqlite-jdbc.jar to Referenced Libraries.", e);
         } catch (SQLException e) {
             throw new RuntimeException("Database initialization failed: " + e.getMessage(), e);
         }
     }
 
-    // Opens a connection to sinag.db
+    // Ensures SINAG_Data folder exists and opens a connection to sinag.db
     private Connection connect() throws SQLException {
+        File folder = new File(DB_FOLDER);
+        if (!folder.exists()) {
+            folder.mkdirs();
+        }
         Connection conn = DriverManager.getConnection(DB_URL);
         try (Statement stmt = conn.createStatement()) {
             stmt.execute("PRAGMA busy_timeout = 5000");
@@ -79,23 +94,23 @@ public class Database {
         if (isContentEmpty) {
             addContent("Article", "What is El Niño?",
                 "El Niño is a climate pattern involving unusually warm ocean surface temperatures in the central and eastern tropical Pacific. It can influence rainfall and temperature patterns in many regions.",
-                "Basics", "PAGASA / Educational reference", "2026-11-06");
+                "Basics", "PAGASA / Educational reference", "2026-11-06", "");
 
             addContent("Article", "Possible effects of El Niño",
                 "Possible effects include below-normal rainfall, dry conditions, water shortages, increased heat, and impacts on agriculture. Effects vary by location and event.",
-                "Effects", "Educational reference", "2026-11-06");
+                "Effects", "Educational reference", "2026-11-06", "");
 
             addContent("Advisory", "Practice responsible water use",
                 "Repair leaking taps, reuse suitable household water, turn off taps when not needed, and prioritize safe drinking water. Follow announcements from your local water provider.",
-                "Water Conservation", "Sample educational advisory — verify with your LGU", "2026-11-06");
+                "Water Conservation", "Sample educational advisory — verify with your LGU", "2026-11-06", "");
 
             addContent("Guide", "Household heat-safety guide",
                 "Drink water regularly, limit strenuous outdoor activity during the hottest hours, stay in shaded or cool places, and check on children, older adults, and vulnerable neighbors.",
-                "Heat Safety", "Sample preparedness guide", "2026-11-06");
+                "Heat Safety", "Sample preparedness guide", "2026-11-06", "");
 
             addContent("FAQ", "Does El Niño mean it will not rain at all?",
                 "No. El Niño can increase the likelihood of below-normal rainfall in some places, but it does not mean every location will have no rain.",
-                "Basics", "Educational reference", "2026-11-06");
+                "Basics", "Educational reference", "2026-11-06", "");
         }
 
         boolean isQuestionsEmpty = false;
@@ -131,8 +146,8 @@ public class Database {
 
     // --- CONTENT CRUD METHODS ---
 
-    public void addContent(String type, String title, String body, String category, String source, String date) throws SQLException {
-        String sql = "INSERT INTO content (type, title, body, category, source, published_date) VALUES (?, ?, ?, ?, ?, ?)";
+    public void addContent(String type, String title, String body, String category, String source, String date, String imagePath) throws SQLException {
+        String sql = "INSERT INTO content (type, title, body, category, source, published_date, image_path) VALUES (?, ?, ?, ?, ?, ?, ?)";
         try (Connection conn = connect(); PreparedStatement pstmt = conn.prepareStatement(sql)) {
             pstmt.setString(1, type);
             pstmt.setString(2, title);
@@ -140,12 +155,13 @@ public class Database {
             pstmt.setString(4, category);
             pstmt.setString(5, source);
             pstmt.setString(6, date);
+            pstmt.setString(7, imagePath == null ? "" : imagePath);
             pstmt.executeUpdate();
         }
     }
 
-    public void updateContent(int id, String type, String title, String body, String category, String source, String date) throws SQLException {
-        String sql = "UPDATE content SET type=?, title=?, body=?, category=?, source=?, published_date=? WHERE id=?";
+    public void updateContent(int id, String type, String title, String body, String category, String source, String date, String imagePath) throws SQLException {
+        String sql = "UPDATE content SET type=?, title=?, body=?, category=?, source=?, published_date=?, image_path=? WHERE id=?";
         try (Connection conn = connect(); PreparedStatement pstmt = conn.prepareStatement(sql)) {
             pstmt.setString(1, type);
             pstmt.setString(2, title);
@@ -153,7 +169,8 @@ public class Database {
             pstmt.setString(4, category);
             pstmt.setString(5, source);
             pstmt.setString(6, date);
-            pstmt.setInt(7, id);
+            pstmt.setString(7, imagePath == null ? "" : imagePath);
+            pstmt.setInt(8, id);
             pstmt.executeUpdate();
         }
     }
@@ -196,16 +213,23 @@ public class Database {
                     String source = rs.getString("source");
                     String date = rs.getString("published_date");
 
+                    String img = "";
+                    try {
+                        img = rs.getString("image_path");
+                    } catch (SQLException ignored) {
+                        // Safe fallback if reading an older database
+                    }
+
                     // Instantiate the matching subclass (Polymorphism)
                     Content item;
                     if (contentType.equals("Article")) {
-                        item = new Article(id, title, body, cat, source, date);
+                        item = new Article(id, title, body, cat, source, date, img);
                     } else if (contentType.equals("Advisory")) {
-                        item = new Advisory(id, title, body, cat, source, date);
+                        item = new Advisory(id, title, body, cat, source, date, img);
                     } else if (contentType.equals("FAQ")) {
-                        item = new FAQ(id, title, body, cat, source, date);
+                        item = new FAQ(id, title, body, cat, source, date, img);
                     } else {
-                        item = new Guide(id, title, body, cat, source, date);
+                        item = new Guide(id, title, body, cat, source, date, img);
                     }
                     results.add(item);
                 }
@@ -227,6 +251,22 @@ public class Database {
             pstmt.setString(6, d);
             pstmt.setString(7, correct);
             pstmt.setString(8, explanation);
+            pstmt.executeUpdate();
+        }
+    }
+
+    public void updateQuestion(int id, String category, String question, String a, String b, String c, String d, String correct, String explanation) throws SQLException {
+        String sql = "UPDATE questions SET category=?, question=?, a=?, b=?, c=?, d=?, correct=?, explanation=? WHERE id=?";
+        try (Connection conn = connect(); PreparedStatement pstmt = conn.prepareStatement(sql)) {
+            pstmt.setString(1, category);
+            pstmt.setString(2, question);
+            pstmt.setString(3, a);
+            pstmt.setString(4, b);
+            pstmt.setString(5, c);
+            pstmt.setString(6, d);
+            pstmt.setString(7, correct);
+            pstmt.setString(8, explanation);
+            pstmt.setInt(9, id);
             pstmt.executeUpdate();
         }
     }
