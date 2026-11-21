@@ -935,6 +935,8 @@ public class SinagApp extends JFrame {
         btn.setFont(new Font("SansSerif", Font.BOLD, 11));
         btn.setForeground(Color.WHITE);
         btn.setBackground(bgColor);
+        btn.setOpaque(true);              // Forces custom background color to show
+        btn.setBorderPainted(false);      // Prevents Windows default white border/fill
         btn.setFocusPainted(false);
         btn.setBorder(new EmptyBorder(10, 15, 10, 15));
         btn.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
