@@ -2,19 +2,16 @@ package com.sinag;
 
 import javax.swing.*;
 import javax.swing.border.EmptyBorder;
-import javax.swing.filechooser.FileNameExtensionFilter;
 import javax.swing.table.DefaultTableCellRenderer;
 import javax.swing.table.DefaultTableModel;
 import java.awt.*;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.io.File;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.nio.file.StandardCopyOption;
 import java.sql.SQLException;
 import java.time.LocalDate;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 
 /**
@@ -48,6 +45,11 @@ public class SinagApp extends JFrame {
     private int currentQuestionIndex = 0;
     private int quizScore = 0;
     private boolean hasAnswered = false;
+    private Timer questionTimer;
+    private int secondsLeft = 20;
+    private int currentStreak = 0;
+    private int bestStreak = 0;
+    private boolean fiftyFiftyUsed = false;
 
     public SinagApp() {
         setTitle("SINAG: El Niño Awareness and Preparedness System");
@@ -357,7 +359,7 @@ public class SinagApp extends JFrame {
             "Open Guides", () -> showContentPage("Guide"));
 
         addInteractiveHomeCard(cardGrid, "★", "PREPAREDNESS QUIZ", new Color(217, 119, 6),
-            "Challenge yourself with interactive questions and instant explanations.",
+            "Challenge yourself with timed questions, streaks, and instant explanations.",
             "Start Quiz", this::showQuiz);
 
         centerSection.add(cardGrid, BorderLayout.CENTER);
@@ -634,20 +636,24 @@ public class SinagApp extends JFrame {
         reloadItems.run();
         switchMainPage(page);
     }
-    
+
     // =========================================================================
-    // 4. INTERACTIVE SINGLE-PLAYER QUIZ (Progress Bar + Card Choices)
+    // 4. INTERACTIVE GAMIFIED QUIZ (Timer + Streak + 50/50 Lifeline + Rank)
     // =========================================================================
 
     private void showQuiz() {
         setActiveNav("Quiz");
-        JPanel page = createPageContainer("Preparedness Quiz", "Test your El Niño readiness knowledge with instant feedback and explanations.");
+        JPanel page = createPageContainer("Preparedness Quiz Challenge", "Beat the 20-second clock, build an answer streak, and test your El Niño readiness.");
         JPanel wrapper = new JPanel(new BorderLayout(12, 14));
         wrapper.setOpaque(false);
 
+        // Top Game Bar (Topic Selector + Start + 50/50 Lifeline + Streak Badge)
         RoundedPanel topControls = new RoundedPanel(14, Color.WHITE, BORDER_LIGHT);
-        topControls.setLayout(new FlowLayout(FlowLayout.LEFT, 10, 8));
-        topControls.setBorder(new EmptyBorder(6, 12, 6, 12));
+        topControls.setLayout(new BorderLayout(10, 0));
+        topControls.setBorder(new EmptyBorder(8, 14, 8, 14));
+
+        JPanel leftControls = new JPanel(new FlowLayout(FlowLayout.LEFT, 8, 0));
+        leftControls.setOpaque(false);
 
         JComboBox<String> categoryBox = new JComboBox<>(new String[]{
             "All", "Basics", "Effects", "Water Conservation", "Heat Safety", "Preparedness"
@@ -655,22 +661,44 @@ public class SinagApp extends JFrame {
         categoryBox.setFont(new Font("SansSerif", Font.PLAIN, 12));
         categoryBox.setBackground(Color.WHITE);
 
-        JButton startBtn = createStyledButton("▶  Start Quiz", TEAL_PRIMARY);
+        JButton startBtn = createStyledButton("▶  Start Challenge", TEAL_PRIMARY);
+        JButton lifelineBtn = createStyledButton("⚡ 50/50 Lifeline (1)", SOLAR_AMBER);
+        lifelineBtn.setEnabled(false);
 
-        topControls.add(createFieldLabel("Select Topic"));
-        topControls.add(categoryBox);
-        topControls.add(startBtn);
+        leftControls.add(createFieldLabel("Topic"));
+        leftControls.add(categoryBox);
+        leftControls.add(startBtn);
+        leftControls.add(lifelineBtn);
 
+        JLabel streakLabel = new JLabel("🔥 STREAK: 0x   |   SCORE: 0");
+        streakLabel.setFont(new Font("SansSerif", Font.BOLD, 12));
+        streakLabel.setForeground(SOLAR_TEXT);
+
+        topControls.add(leftControls, BorderLayout.WEST);
+        topControls.add(streakLabel, BorderLayout.EAST);
+
+        // Main Quiz Card
         RoundedPanel quizCard = new RoundedPanel(18, Color.WHITE, BORDER_LIGHT);
         quizCard.setLayout(new BorderLayout(12, 16));
         quizCard.setBorder(new EmptyBorder(24, 28, 24, 28));
 
+        // Progress + Live Countdown Header
         JPanel progressHeader = new JPanel(new BorderLayout(0, 8));
         progressHeader.setOpaque(false);
 
-        JLabel progressLabel = new JLabel("READY WHEN YOU ARE");
+        JPanel statusRow = new JPanel(new BorderLayout());
+        statusRow.setOpaque(false);
+
+        JLabel progressLabel = new JLabel("SELECT A TOPIC & PRESS START CHALLENGE");
         progressLabel.setFont(new Font("SansSerif", Font.BOLD, 12));
         progressLabel.setForeground(TEAL_PRIMARY);
+
+        JLabel timerLabel = new JLabel("⏱ 20s");
+        timerLabel.setFont(new Font("SansSerif", Font.BOLD, 13));
+        timerLabel.setForeground(TEAL_PRIMARY);
+
+        statusRow.add(progressLabel, BorderLayout.WEST);
+        statusRow.add(timerLabel, BorderLayout.EAST);
 
         JProgressBar progressBar = new JProgressBar(0, 100);
         progressBar.setValue(0);
@@ -679,10 +707,10 @@ public class SinagApp extends JFrame {
         progressBar.setBorderPainted(false);
         progressBar.setPreferredSize(new Dimension(0, 8));
 
-        progressHeader.add(progressLabel, BorderLayout.NORTH);
+        progressHeader.add(statusRow, BorderLayout.NORTH);
         progressHeader.add(progressBar, BorderLayout.SOUTH);
 
-        JTextArea questionArea = new JTextArea("Choose a topic above, then click Start Quiz to begin.");
+        JTextArea questionArea = new JTextArea("Ready to test your El Niño preparedness? Choose a topic above and click Start Challenge!");
         questionArea.setLineWrap(true);
         questionArea.setWrapStyleWord(true);
         questionArea.setEditable(false);
@@ -709,8 +737,25 @@ public class SinagApp extends JFrame {
             radio.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
             radio.setVisible(false);
 
+            radio.addMouseListener(new MouseAdapter() {
+                @Override
+                public void mouseEntered(MouseEvent e) {
+                    if (!hasAnswered && radio.isEnabled() && !radio.isSelected()) {
+                        radio.setBackground(new Color(241, 245, 249));
+                    }
+                }
+                @Override
+                public void mouseExited(MouseEvent e) {
+                    if (!hasAnswered && radio.isEnabled() && !radio.isSelected()) {
+                        radio.setBackground(new Color(248, 250, 252));
+                    }
+                }
+            });
+
             radio.addActionListener(e -> {
+                if (hasAnswered) return;
                 for (JRadioButton rb : optionButtons) {
+                    if (!rb.isEnabled()) continue;
                     if (rb.isSelected()) {
                         rb.setBackground(new Color(240, 253, 250));
                         rb.setBorder(BorderFactory.createCompoundBorder(
@@ -739,9 +784,9 @@ public class SinagApp extends JFrame {
         feedbackArea.setOpaque(true);
         feedbackArea.setBackground(Color.WHITE);
         feedbackArea.setFont(new Font("SansSerif", Font.BOLD, 12));
-        feedbackArea.setBorder(new EmptyBorder(8, 12, 8, 12));
+        feedbackArea.setBorder(new EmptyBorder(10, 14, 10, 14));
 
-        JButton submitOrNextBtn = createStyledButton("Submit Answer", OCEAN_DARK);
+        JButton submitOrNextBtn = createStyledButton("Lock In Answer", OCEAN_DARK);
         submitOrNextBtn.setEnabled(false);
 
         JPanel questionBody = new JPanel(new BorderLayout(10, 14));
@@ -758,17 +803,125 @@ public class SinagApp extends JFrame {
         wrapper.add(quizCard, BorderLayout.CENTER);
         page.add(wrapper, BorderLayout.CENTER);
 
+        // Helper to evaluate and color-code options on submit or timeout
+        Runnable evaluateAnswer = () -> {
+            if (hasAnswered || quizQuestions.isEmpty()) return;
+            if (questionTimer != null) questionTimer.stop();
+
+            QuizQuestion currentQ = quizQuestions.get(currentQuestionIndex);
+            String userAnswer = null;
+            for (int i = 0; i < 4; i++) {
+                if (optionButtons[i].isSelected()) {
+                    userAnswer = String.valueOf((char) ('A' + i));
+                }
+            }
+
+            boolean isTimeout = (userAnswer == null);
+            boolean isCorrect = !isTimeout && currentQ.checkAnswer(userAnswer);
+
+            // Highlight correct & wrong cards visually
+            int correctIdx = currentQ.getCorrect().charAt(0) - 'A';
+            for (int i = 0; i < 4; i++) {
+                optionButtons[i].setEnabled(false);
+                if (i == correctIdx) {
+                    optionButtons[i].setBackground(new Color(220, 252, 231));
+                    optionButtons[i].setForeground(new Color(22, 101, 52));
+                    optionButtons[i].setBorder(BorderFactory.createCompoundBorder(
+                        BorderFactory.createLineBorder(new Color(22, 163, 74), 2),
+                        new EmptyBorder(9, 13, 9, 13)
+                    ));
+                } else if (optionButtons[i].isSelected()) {
+                    optionButtons[i].setBackground(new Color(254, 226, 226));
+                    optionButtons[i].setForeground(new Color(153, 27, 27));
+                    optionButtons[i].setBorder(BorderFactory.createCompoundBorder(
+                        BorderFactory.createLineBorder(new Color(220, 38, 38), 2),
+                        new EmptyBorder(9, 13, 9, 13)
+                    ));
+                }
+            }
+
+            if (isCorrect) {
+                quizScore++;
+                currentStreak++;
+                bestStreak = Math.max(bestStreak, currentStreak);
+                feedbackArea.setBackground(new Color(220, 252, 231));
+                feedbackArea.setForeground(new Color(22, 101, 52));
+                feedbackArea.setText("✓ Spot on! " + (currentStreak >= 2 ? "(" + currentStreak + "x Streak!) " : "") + currentQ.getExplanation());
+            } else {
+                currentStreak = 0;
+                feedbackArea.setBackground(new Color(254, 226, 226));
+                feedbackArea.setForeground(new Color(153, 27, 27));
+                String prefix = isTimeout ? "⏰ Time's up! " : "✕ Not quite. ";
+                feedbackArea.setText(prefix + "Correct answer: " + currentQ.getCorrect()
+                        + ". " + currentQ.getChoice(currentQ.getCorrect()) + " — " + currentQ.getExplanation());
+            }
+
+            streakLabel.setText("🔥 STREAK: " + currentStreak + "x   |   SCORE: " + quizScore);
+            lifelineBtn.setEnabled(false);
+            hasAnswered = true;
+            submitOrNextBtn.setBackground(TEAL_PRIMARY);
+            submitOrNextBtn.setText(currentQuestionIndex == quizQuestions.size() - 1 ? "View Final Readiness Rank  ★" : "Next Question  →");
+        };
+
+        // 20-Second Per-Question Countdown Timer
+        if (questionTimer != null) questionTimer.stop();
+        questionTimer = new Timer(1000, e -> {
+            if (hasAnswered) return;
+            secondsLeft--;
+            timerLabel.setText("⏱ " + secondsLeft + "s");
+            if (secondsLeft <= 5) {
+                timerLabel.setForeground(new Color(220, 38, 38));
+            } else if (secondsLeft <= 10) {
+                timerLabel.setForeground(SOLAR_TEXT);
+            } else {
+                timerLabel.setForeground(TEAL_PRIMARY);
+            }
+            if (secondsLeft <= 0) {
+                evaluateAnswer.run();
+            }
+        });
+
+        // 50/50 Lifeline: Disables 2 incorrect options once per game
+        lifelineBtn.addActionListener(e -> {
+            if (fiftyFiftyUsed || hasAnswered || quizQuestions.isEmpty()) return;
+            QuizQuestion currentQ = quizQuestions.get(currentQuestionIndex);
+            int correctIdx = currentQ.getCorrect().charAt(0) - 'A';
+
+            List<Integer> wrongIndices = new ArrayList<>();
+            for (int i = 0; i < 4; i++) {
+                if (i != correctIdx) wrongIndices.add(i);
+            }
+            Collections.shuffle(wrongIndices);
+
+            for (int k = 0; k < 2; k++) {
+                int hideIdx = wrongIndices.get(k);
+                optionButtons[hideIdx].setEnabled(false);
+                optionButtons[hideIdx].setText("—  Eliminated by 50/50");
+                optionButtons[hideIdx].setForeground(TEXT_MUTED);
+            }
+            fiftyFiftyUsed = true;
+            lifelineBtn.setEnabled(false);
+            lifelineBtn.setText("⚡ 50/50 Used");
+        });
+
         startBtn.addActionListener(e -> {
             try {
                 quizQuestions = db.getQuestions((String) categoryBox.getSelectedItem());
                 currentQuestionIndex = 0;
                 quizScore = 0;
+                currentStreak = 0;
+                bestStreak = 0;
+                fiftyFiftyUsed = false;
 
                 if (quizQuestions.isEmpty()) {
                     JOptionPane.showMessageDialog(this, "No questions available for this topic.");
                     return;
                 }
-                displayCurrentQuestion(progressLabel, progressBar, questionArea, optionButtons, choiceGroup, feedbackArea, submitOrNextBtn);
+                streakLabel.setText("🔥 STREAK: 0x   |   SCORE: 0");
+                lifelineBtn.setText("⚡ 50/50 Lifeline (1)");
+                lifelineBtn.setEnabled(true);
+                displayCurrentQuestion(progressLabel, progressBar, timerLabel, questionArea,
+                        optionButtons, choiceGroup, feedbackArea, submitOrNextBtn, lifelineBtn);
             } catch (SQLException ex) {
                 showError(ex);
             }
@@ -776,51 +929,43 @@ public class SinagApp extends JFrame {
 
         submitOrNextBtn.addActionListener(e -> {
             if (quizQuestions.isEmpty()) return;
-            QuizQuestion currentQ = quizQuestions.get(currentQuestionIndex);
 
             if (!hasAnswered) {
-                String userAnswer = null;
-                for (int i = 0; i < 4; i++) {
-                    if (optionButtons[i].isSelected()) {
-                        userAnswer = String.valueOf((char) ('A' + i));
-                    }
+                boolean anySelected = false;
+                for (JRadioButton rb : optionButtons) {
+                    if (rb.isSelected()) anySelected = true;
                 }
-
-                if (userAnswer == null) {
-                    JOptionPane.showMessageDialog(this, "Please select an answer first.");
+                if (!anySelected) {
+                    JOptionPane.showMessageDialog(this, "Pick an option before locking in your answer!");
                     return;
                 }
-
-                boolean isCorrect = currentQ.checkAnswer(userAnswer);
-                if (isCorrect) {
-                    quizScore++;
-                    feedbackArea.setBackground(new Color(220, 252, 231));
-                    feedbackArea.setForeground(new Color(22, 101, 52));
-                    feedbackArea.setText("✓ Correct! " + currentQ.getExplanation());
-                } else {
-                    feedbackArea.setBackground(new Color(254, 226, 226));
-                    feedbackArea.setForeground(new Color(153, 27, 27));
-                    feedbackArea.setText("✕ Not quite. Correct answer: " + currentQ.getCorrect()
-                            + ". " + currentQ.getChoice(currentQ.getCorrect()) + ". " + currentQ.getExplanation());
-                }
-
-                hasAnswered = true;
-                submitOrNextBtn.setText(currentQuestionIndex == quizQuestions.size() - 1 ? "View Final Score" : "Next Question  →");
+                evaluateAnswer.run();
             } else {
                 currentQuestionIndex++;
                 if (currentQuestionIndex >= quizQuestions.size()) {
+                    if (questionTimer != null) questionTimer.stop();
                     progressBar.setValue(100);
-                    progressLabel.setText("QUIZ COMPLETED  •  FINAL SCORE: " + quizScore + " / " + quizQuestions.size());
-                    questionArea.setText("Great work! You scored " + quizScore + " out of " + quizQuestions.size() + ".");
+                    timerLabel.setText("DONE");
+
+                    double pct = ((double) quizScore / quizQuestions.size()) * 100.0;
+                    String rankTitle = pct >= 80 ? "🏆 RANK: CLIMATE CHAMPION"
+                                     : pct >= 50 ? "🛡 RANK: PREPARED CITIZEN"
+                                                 : "🌱 RANK: HEAT & WATER TRAINEE";
+
+                    progressLabel.setText("CHALLENGE COMPLETE  •  " + rankTitle);
+                    questionArea.setText("Final Score: " + quizScore + " / " + quizQuestions.size()
+                            + " (" + Math.round(pct) + "%)   •   Best Streak: " + bestStreak + "x");
                     for (JRadioButton btn : optionButtons) {
                         btn.setVisible(false);
                     }
                     feedbackArea.setBackground(SOLAR_SOFT);
                     feedbackArea.setForeground(SOLAR_TEXT);
-                    feedbackArea.setText("☀ Tip: Review the Educational Articles and Preparedness Guides, then click Start Quiz to try again!");
+                    feedbackArea.setText("☀ Tip: Review the Educational Articles and Preparedness Guides to boost your rank, then click Start Challenge to play again!");
                     submitOrNextBtn.setEnabled(false);
+                    lifelineBtn.setEnabled(false);
                 } else {
-                    displayCurrentQuestion(progressLabel, progressBar, questionArea, optionButtons, choiceGroup, feedbackArea, submitOrNextBtn);
+                    displayCurrentQuestion(progressLabel, progressBar, timerLabel, questionArea,
+                            optionButtons, choiceGroup, feedbackArea, submitOrNextBtn, lifelineBtn);
                 }
             }
         });
@@ -828,18 +973,21 @@ public class SinagApp extends JFrame {
         switchMainPage(page);
     }
 
-    private void displayCurrentQuestion(JLabel progressLabel, JProgressBar progressBar, JTextArea questionArea,
-                                        JRadioButton[] optionButtons, ButtonGroup choiceGroup,
-                                        JTextArea feedbackArea, JButton actionBtn) {
+    private void displayCurrentQuestion(JLabel progressLabel, JProgressBar progressBar, JLabel timerLabel,
+                                        JTextArea questionArea, JRadioButton[] optionButtons, ButtonGroup choiceGroup,
+                                        JTextArea feedbackArea, JButton actionBtn, JButton lifelineBtn) {
         QuizQuestion q = quizQuestions.get(currentQuestionIndex);
         int percent = (int) (((double) currentQuestionIndex / quizQuestions.size()) * 100);
         progressBar.setValue(percent);
-        progressLabel.setText("QUESTION " + (currentQuestionIndex + 1) + " OF " + quizQuestions.size() + "   •   CURRENT SCORE: " + quizScore);
+        progressLabel.setText("QUESTION " + (currentQuestionIndex + 1) + " OF " + quizQuestions.size()
+                + "   •   TOPIC: " + q.getCategory().toUpperCase());
         questionArea.setText(q.getQuestion());
 
         String[] choices = q.getChoices();
         for (int i = 0; i < 4; i++) {
             optionButtons[i].setText((char) ('A' + i) + ".   " + choices[i]);
+            optionButtons[i].setEnabled(true);
+            optionButtons[i].setForeground(TEXT_MAIN);
             optionButtons[i].setBackground(new Color(248, 250, 252));
             optionButtons[i].setBorder(BorderFactory.createCompoundBorder(
                 BorderFactory.createLineBorder(BORDER_LIGHT),
@@ -852,8 +1000,15 @@ public class SinagApp extends JFrame {
         feedbackArea.setBackground(Color.WHITE);
         feedbackArea.setText("");
         hasAnswered = false;
-        actionBtn.setText("Submit Answer");
+        lifelineBtn.setEnabled(!fiftyFiftyUsed);
+        actionBtn.setBackground(OCEAN_DARK);
+        actionBtn.setText("Lock In Answer");
         actionBtn.setEnabled(true);
+
+        secondsLeft = 20;
+        timerLabel.setText("⏱ 20s");
+        timerLabel.setForeground(TEAL_PRIMARY);
+        if (questionTimer != null) questionTimer.restart();
     }
 
     // =========================================================================
@@ -878,7 +1033,7 @@ public class SinagApp extends JFrame {
             + "Core Capabilities:\n"
             + "• Educational Content Library: Structured Articles, Public Advisories, FAQs, and Preparedness Guides with image support.\n"
             + "• Keyword & Topic Search: Instant filtering to locate relevant heat-safety and water-saving guidance.\n"
-            + "• Interactive Single-Player Quiz: Self-paced readiness assessment with live scoring and explanations.\n"
+            + "• Interactive Single-Player Quiz: Timed readiness challenge with streaks, lifelines, live scoring, and explanations.\n"
             + "• Administrator Management: Secure portal for updating educational materials, images, and quiz questions.\n\n"
             + "Disclaimer: Always verify official weather warnings and community announcements with PAGASA and your Local Government Unit (LGU)."
         );
@@ -1087,7 +1242,6 @@ public class SinagApp extends JFrame {
 
         JButton uploadBtn = createStyledButton("Browse...", OCEAN_MID);
         uploadBtn.addActionListener(e -> {
-            // Opens the native Windows File Manager
             FileDialog fileDialog = new FileDialog(dialog, "Select Image", FileDialog.LOAD);
             fileDialog.setFile("*.jpg;*.jpeg;*.png;*.gif");
             fileDialog.setVisible(true);
@@ -1109,7 +1263,6 @@ public class SinagApp extends JFrame {
                     }
                     chosenImagePath[0] = destFile.getAbsolutePath();
                 } catch (Exception copyEx) {
-                    // Fallback: use the original file location directly so upload never fails
                     chosenImagePath[0] = sourceFile.getAbsolutePath();
                 }
                 fileStatusLabel.setText(sourceFile.getName());
@@ -1424,6 +1577,9 @@ public class SinagApp extends JFrame {
     }
 
     private void switchMainPage(JPanel newPage) {
+        if (questionTimer != null && questionTimer.isRunning()) {
+            questionTimer.stop();
+        }
         mainContentArea.removeAll();
         mainContentArea.add(newPage, BorderLayout.CENTER);
         mainContentArea.revalidate();
