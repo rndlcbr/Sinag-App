@@ -485,7 +485,7 @@ public class SinagApp extends JFrame {
         filterCard.add(searchBtn);
         filterCard.add(resetBtn);
 
-        // Left List of Records (sized so 2-line titles + category fit without clipping)
+        // Left List of Records (clean title + category without [Image] tag)
         DefaultListModel<Content> listModel = new DefaultListModel<>();
         JList<Content> itemList = new JList<>(listModel);
         itemList.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
@@ -493,10 +493,9 @@ public class SinagApp extends JFrame {
         itemList.setBackground(Color.WHITE);
 
         itemList.setCellRenderer((list, value, index, isSelected, cellHasFocus) -> {
-            String imgIndicator = (value.getImagePath() != null && !value.getImagePath().isBlank()) ? "  [Image]" : "";
             JLabel row = new JLabel("<html><div style='width:195px; padding:2px;'>"
                     + "<b style='font-size:11px; color:#0F293A;'>" + escapeHtml(value.getTitle()) + "</b><br>"
-                    + "<span style='font-size:9px; color:#0D9488;'>● " + escapeHtml(value.getCategory()) + imgIndicator + "</span>"
+                    + "<span style='font-size:9px; color:#0D9488;'>● " + escapeHtml(value.getCategory()) + "</span>"
                     + "</div></html>");
             row.setOpaque(true);
             row.setVerticalAlignment(SwingConstants.CENTER);
