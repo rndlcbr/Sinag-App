@@ -445,7 +445,7 @@ public class SinagApp extends JFrame {
     }
 
     // =========================================================================
-    // 3. EDUCATIONAL CONTENT READER (Search + Category Filter + Image Display)
+    // 3. EDUCATIONAL CONTENT READER (Search + Topic Filter + Image + Bold HTML)
     // =========================================================================
 
     private void showContentPage(String contentType) {
@@ -489,7 +489,7 @@ public class SinagApp extends JFrame {
         filterCard.add(searchBtn);
         filterCard.add(resetBtn);
 
-        // Left List of Records (clean title + category without [Image] tag)
+        // Left List of Records
         DefaultListModel<Content> listModel = new DefaultListModel<>();
         JList<Content> itemList = new JList<>(listModel);
         itemList.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
@@ -536,8 +536,8 @@ public class SinagApp extends JFrame {
         readerHeader.add(Box.createVerticalStrut(10));
         readerHeader.add(new JSeparator());
 
-        // Unified scrollable container for BOTH the image and the text
-        JPanel scrollableContent = new JPanel();
+        // Scrollable container locked to viewport width with clean white background
+        ScrollablePanel scrollableContent = new ScrollablePanel();
         scrollableContent.setLayout(new BoxLayout(scrollableContent, BoxLayout.Y_AXIS));
         scrollableContent.setBackground(Color.WHITE);
 
@@ -546,21 +546,25 @@ public class SinagApp extends JFrame {
         readerImageLabel.setBorder(new EmptyBorder(4, 0, 14, 0));
         readerImageLabel.setVisible(false);
 
-        JTextArea readingPane = new JTextArea("Choose any article, advisory, FAQ, or preparedness guide from the list to view its full details here.");
-        readingPane.setAlignmentX(Component.LEFT_ALIGNMENT);
-        readingPane.setLineWrap(true);
-        readingPane.setWrapStyleWord(true);
-        readingPane.setEditable(false);
+        JEditorPane readingPane = new JEditorPane("text/html", "");
+        readingPane.putClientProperty(JEditorPane.HONOR_DISPLAY_PROPERTIES, Boolean.TRUE);
         readingPane.setFont(new Font("SansSerif", Font.PLAIN, 14));
         readingPane.setForeground(TEXT_MAIN);
+        readingPane.setAlignmentX(Component.LEFT_ALIGNMENT);
+        readingPane.setEditable(false);
+        readingPane.setOpaque(true);
         readingPane.setBackground(Color.WHITE);
+        readingPane.setText(formatBodyAsHtml("Choose any article, advisory, FAQ, or preparedness guide from the list to view its full details here."));
 
         scrollableContent.add(readerImageLabel);
         scrollableContent.add(readingPane);
 
         JScrollPane contentScroll = new JScrollPane(scrollableContent);
         contentScroll.setBorder(null);
+        contentScroll.setBackground(Color.WHITE);
+        contentScroll.getViewport().setBackground(Color.WHITE);
         contentScroll.getVerticalScrollBar().setUnitIncrement(16);
+        contentScroll.setHorizontalScrollBarPolicy(ScrollPaneConstants.HORIZONTAL_SCROLLBAR_NEVER);
 
         readerCard.add(readerHeader, BorderLayout.NORTH);
         readerCard.add(contentScroll, BorderLayout.CENTER);
@@ -572,36 +576,37 @@ public class SinagApp extends JFrame {
                 readerMeta.setText(selected.getCategory().toUpperCase()
                         + "   |   Published: " + selected.getPublishedDate()
                         + "   |   Source: " + selected.getSource());
-                readingPane.setText(selected.getBody());
+                readingPane.setText(formatBodyAsHtml(selected.getBody()));
 
-                // Display Base64 cloud image (or local file fallback) inside the scrollable area
+                // Only display image label when a valid image exists; otherwise collapse it completely
                 String imgPath = selected.getImagePath();
+                boolean hasValidImage = false;
                 if (imgPath != null && !imgPath.isBlank()) {
                     try {
                         if (imgPath.startsWith("data:image")) {
                             String base64Data = imgPath.substring(imgPath.indexOf(",") + 1);
                             byte[] imgBytes = Base64.getDecoder().decode(base64Data);
                             readerImageLabel.setIcon(new ImageIcon(imgBytes));
-                            readerImageLabel.setVisible(true);
+                            hasValidImage = true;
                         } else if (new File(imgPath).exists()) {
                             ImageIcon rawIcon = new ImageIcon(imgPath);
                             Image scaled = rawIcon.getImage().getScaledInstance(480, 230, Image.SCALE_SMOOTH);
                             readerImageLabel.setIcon(new ImageIcon(scaled));
-                            readerImageLabel.setVisible(true);
-                        } else {
-                            readerImageLabel.setIcon(null);
-                            readerImageLabel.setVisible(false);
+                            hasValidImage = true;
                         }
-                    } catch (Exception imgEx) {
-                        readerImageLabel.setIcon(null);
-                        readerImageLabel.setVisible(false);
+                    } catch (Exception ignored) {
                     }
+                }
+
+                if (hasValidImage) {
+                    readerImageLabel.setVisible(true);
                 } else {
                     readerImageLabel.setIcon(null);
                     readerImageLabel.setVisible(false);
                 }
 
-                // Reset scrollbar back to the top when opening a new item
+                scrollableContent.revalidate();
+                scrollableContent.repaint();
                 SwingUtilities.invokeLater(() -> contentScroll.getVerticalScrollBar().setValue(0));
             }
         });
@@ -620,7 +625,7 @@ public class SinagApp extends JFrame {
                 } else {
                     readerTitle.setText("No matching records found");
                     readerMeta.setText("Try clearing your search keyword or selecting 'All' topics");
-                    readingPane.setText("");
+                    readingPane.setText(formatBodyAsHtml(""));
                 }
             } catch (SQLException ex) {
                 showError(ex);
@@ -1227,7 +1232,7 @@ public class SinagApp extends JFrame {
         final String[] chosenImagePath = {existing == null ? "" : existing.getImagePath()};
 
         JDialog dialog = new JDialog(this, existing == null ? "Add New Content" : "Edit Content", true);
-        dialog.setSize(540, 540);
+        dialog.setSize(540, 560);
         dialog.setLocationRelativeTo(this);
         dialog.setLayout(new BorderLayout());
 
@@ -1303,15 +1308,46 @@ public class SinagApp extends JFrame {
         topFields.add(new JLabel("Date (YYYY-MM-DD):")); topFields.add(dateField);
         topFields.add(new JLabel("Image (Optional):")); topFields.add(imagePickerRow);
 
+        // Body Editor with Bold (B) formatting button
         JPanel bodyWrapper = new JPanel(new BorderLayout(0, 6));
         bodyWrapper.setOpaque(false);
-        bodyWrapper.add(new JLabel("Body / Full Text:"), BorderLayout.NORTH);
+
+        JPanel bodyHeader = new JPanel(new BorderLayout());
+        bodyHeader.setOpaque(false);
+        bodyHeader.add(new JLabel("Body / Full Text:"), BorderLayout.WEST);
+
+        JButton boldBtn = new JButton("B");
+        boldBtn.setFont(new Font("SansSerif", Font.BOLD, 12));
+        boldBtn.setToolTipText("Highlight text and click B to bold it (**text**)");
+        boldBtn.setFocusPainted(false);
+        boldBtn.setBackground(SIDEBAR_BG);
+        boldBtn.setForeground(OCEAN_DARK);
+        boldBtn.setBorder(BorderFactory.createCompoundBorder(
+            BorderFactory.createLineBorder(BORDER_LIGHT),
+            new EmptyBorder(3, 10, 3, 10)
+        ));
+        boldBtn.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
+        bodyHeader.add(boldBtn, BorderLayout.EAST);
+
+        bodyWrapper.add(bodyHeader, BorderLayout.NORTH);
 
         JTextArea bodyArea = new JTextArea(existing == null ? "" : existing.getBody());
         bodyArea.setLineWrap(true);
         bodyArea.setWrapStyleWord(true);
         bodyArea.setFont(new Font("SansSerif", Font.PLAIN, 13));
         bodyArea.setBorder(new EmptyBorder(8, 8, 8, 8));
+
+        boldBtn.addActionListener(e -> {
+            String selectedText = bodyArea.getSelectedText();
+            if (selectedText != null && !selectedText.isEmpty()) {
+                bodyArea.replaceSelection("**" + selectedText + "**");
+            } else {
+                int pos = bodyArea.getCaretPosition();
+                bodyArea.insert("****", pos);
+                bodyArea.setCaretPosition(pos + 2);
+            }
+            bodyArea.requestFocusInWindow();
+        });
 
         JScrollPane bodyScroll = new JScrollPane(bodyArea);
         bodyScroll.setBorder(BorderFactory.createLineBorder(BORDER_LIGHT));
@@ -1600,6 +1636,13 @@ public class SinagApp extends JFrame {
         return text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;");
     }
 
+    private String formatBodyAsHtml(String rawBody) {
+        String safe = escapeHtml(rawBody == null ? "" : rawBody);
+        safe = safe.replaceAll("\\*\\*(.+?)\\*\\*", "<b>$1</b>");
+        safe = safe.replace("\n", "<br>");
+        return "<html><body style='margin:0; padding:0; width:100%; text-align:justify;'>" + safe + "</body></html>";
+    }
+
     private void switchMainPage(JPanel newPage) {
         if (questionTimer != null && questionTimer.isRunning()) {
             questionTimer.stop();
@@ -1613,6 +1656,29 @@ public class SinagApp extends JFrame {
     private void showError(Exception e) {
         JOptionPane.showMessageDialog(this, e.getMessage(), "SINAG Error", JOptionPane.ERROR_MESSAGE);
         e.printStackTrace();
+    }
+
+    private static class ScrollablePanel extends JPanel implements Scrollable {
+        @Override
+        public Dimension getPreferredScrollableViewportSize() {
+            return getPreferredSize();
+        }
+        @Override
+        public int getScrollableUnitIncrement(Rectangle visibleRect, int orientation, int direction) {
+            return 16;
+        }
+        @Override
+        public int getScrollableBlockIncrement(Rectangle visibleRect, int orientation, int direction) {
+            return 64;
+        }
+        @Override
+        public boolean getScrollableTracksViewportWidth() {
+            return true;
+        }
+        @Override
+        public boolean getScrollableTracksViewportHeight() {
+            return false;
+        }
     }
 
     private static class RoundedPanel extends JPanel {
