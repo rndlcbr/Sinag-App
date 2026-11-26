@@ -1,5 +1,6 @@
 package com.sinag;
 
+import javax.imageio.ImageIO;
 import javax.swing.*;
 import javax.swing.border.EmptyBorder;
 import javax.swing.table.DefaultTableCellRenderer;
@@ -7,10 +8,13 @@ import javax.swing.table.DefaultTableModel;
 import java.awt.*;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
+import java.awt.image.BufferedImage;
+import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.sql.SQLException;
 import java.time.LocalDate;
 import java.util.ArrayList;
+import java.util.Base64;
 import java.util.Collections;
 import java.util.List;
 
@@ -570,13 +574,28 @@ public class SinagApp extends JFrame {
                         + "   |   Source: " + selected.getSource());
                 readingPane.setText(selected.getBody());
 
-                // Display scaled image inside the scrollable area if available
+                // Display Base64 cloud image (or local file fallback) inside the scrollable area
                 String imgPath = selected.getImagePath();
-                if (imgPath != null && !imgPath.isBlank() && new File(imgPath).exists()) {
-                    ImageIcon rawIcon = new ImageIcon(imgPath);
-                    Image scaled = rawIcon.getImage().getScaledInstance(480, 230, Image.SCALE_SMOOTH);
-                    readerImageLabel.setIcon(new ImageIcon(scaled));
-                    readerImageLabel.setVisible(true);
+                if (imgPath != null && !imgPath.isBlank()) {
+                    try {
+                        if (imgPath.startsWith("data:image")) {
+                            String base64Data = imgPath.substring(imgPath.indexOf(",") + 1);
+                            byte[] imgBytes = Base64.getDecoder().decode(base64Data);
+                            readerImageLabel.setIcon(new ImageIcon(imgBytes));
+                            readerImageLabel.setVisible(true);
+                        } else if (new File(imgPath).exists()) {
+                            ImageIcon rawIcon = new ImageIcon(imgPath);
+                            Image scaled = rawIcon.getImage().getScaledInstance(480, 230, Image.SCALE_SMOOTH);
+                            readerImageLabel.setIcon(new ImageIcon(scaled));
+                            readerImageLabel.setVisible(true);
+                        } else {
+                            readerImageLabel.setIcon(null);
+                            readerImageLabel.setVisible(false);
+                        }
+                    } catch (Exception imgEx) {
+                        readerImageLabel.setIcon(null);
+                        readerImageLabel.setVisible(false);
+                    }
                 } else {
                     readerImageLabel.setIcon(null);
                     readerImageLabel.setVisible(false);
@@ -1030,7 +1049,7 @@ public class SinagApp extends JFrame {
             "SINAG is an educational desktop system designed to promote climate awareness, water conservation, "
             + "and household preparedness during El Niño conditions.\n\n"
             + "Core Capabilities:\n"
-            + "• Educational Content Library: Structured Articles, Public Advisories, FAQs, and Preparedness Guides with image support.\n"
+            + "• Educational Content Library: Structured Articles, Public Advisories, FAQs, and Preparedness Guides with cloud image support.\n"
             + "• Keyword & Topic Search: Instant filtering to locate relevant heat-safety and water-saving guidance.\n"
             + "• Interactive Single-Player Quiz: Timed readiness challenge with streaks, lifelines, live scoring, and explanations.\n"
             + "• Administrator Management: Secure portal for updating educational materials, images, and quiz questions.\n\n"
@@ -1232,10 +1251,13 @@ public class SinagApp extends JFrame {
             categoryBox.setSelectedItem(existing.getCategory());
         }
 
-        // Native Windows File Explorer picker row
+        // Native Windows File Explorer picker + Base64 Cloud Encoder
         JPanel imagePickerRow = new JPanel(new BorderLayout(6, 0));
         imagePickerRow.setOpaque(false);
-        JLabel fileStatusLabel = new JLabel(chosenImagePath[0].isBlank() ? "No image" : new File(chosenImagePath[0]).getName());
+        String initialStatus = chosenImagePath[0].isBlank()
+                ? "No image"
+                : (chosenImagePath[0].startsWith("data:image") ? "Cloud image attached" : new File(chosenImagePath[0]).getName());
+        JLabel fileStatusLabel = new JLabel(initialStatus);
         fileStatusLabel.setFont(new Font("SansSerif", Font.ITALIC, 11));
         fileStatusLabel.setForeground(TEXT_MUTED);
 
@@ -1251,20 +1273,23 @@ public class SinagApp extends JFrame {
             if (dir != null && file != null) {
                 File sourceFile = new File(dir, file);
                 try {
-                    File imagesDir = new File(System.getProperty("user.dir"), "images");
-                    if (!imagesDir.exists()) {
-                        imagesDir.mkdirs();
+                    BufferedImage original = ImageIO.read(sourceFile);
+                    if (original != null) {
+                        Image scaled = original.getScaledInstance(480, 230, Image.SCALE_SMOOTH);
+                        BufferedImage resized = new BufferedImage(480, 230, BufferedImage.TYPE_INT_RGB);
+                        Graphics2D g2 = resized.createGraphics();
+                        g2.drawImage(scaled, 0, 0, null);
+                        g2.dispose();
+
+                        ByteArrayOutputStream baos = new ByteArrayOutputStream();
+                        ImageIO.write(resized, "jpg", baos);
+                        String base64 = Base64.getEncoder().encodeToString(baos.toByteArray());
+                        chosenImagePath[0] = "data:image/jpeg;base64," + base64;
+                        fileStatusLabel.setText(sourceFile.getName() + " (Cloud Ready)");
                     }
-                    File destFile = new File(imagesDir, System.currentTimeMillis() + "_" + sourceFile.getName());
-                    try (var in = new java.io.FileInputStream(sourceFile);
-                         var out = new java.io.FileOutputStream(destFile)) {
-                        in.transferTo(out);
-                    }
-                    chosenImagePath[0] = destFile.getAbsolutePath();
-                } catch (Exception copyEx) {
-                    chosenImagePath[0] = sourceFile.getAbsolutePath();
+                } catch (Exception ex) {
+                    JOptionPane.showMessageDialog(dialog, "Could not process image: " + ex.getMessage());
                 }
-                fileStatusLabel.setText(sourceFile.getName());
             }
         });
 
