@@ -115,14 +115,14 @@ public class SinagApp extends JFrame {
         header.setBackground(OCEAN_DARK);
         header.setBorder(BorderFactory.createCompoundBorder(
             BorderFactory.createMatteBorder(0, 0, 3, 0, SOLAR_AMBER),
-            new EmptyBorder(15, 26, 15, 26)
+            new EmptyBorder(12, 26, 12, 26)
         ));
 
         JPanel brandPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 0, 0));
         brandPanel.setOpaque(false);
 
-        // Official SINAG logo image (stored in the project's images folder).
-        JLabel logo = new JLabel(loadImageIcon("images/sinag-logo.png", 76, 76));
+        // Official SINAG logo image (save the new image as images/sinag-logo.jpg).
+        JLabel logo = new JLabel(loadImageIcon("images/sinag-logo.jpg", 76, 88));
         logo.setBorder(new EmptyBorder(0, 0, 0, 12));
 
         JLabel tagline = new JLabel("   |   EL NIÑO AWARENESS & COMMUNITY READINESS");
@@ -365,23 +365,22 @@ public class SinagApp extends JFrame {
 
         addInteractiveHomeCard(cardGrid, "▤", "EDUCATIONAL ARTICLES", TEAL_PRIMARY,
             "Understand what El Niño is, its global climate drivers, and local impacts.",
-            "images/coastal-article.png", "Explore Articles", () -> showContentPage("Article"));
+            "Explore Articles", () -> showContentPage("Article"));
 
         addInteractiveHomeCard(cardGrid, "⚑", "PUBLIC ADVISORIES", SOLAR_AMBER,
             "Stay updated on water conservation alerts and extreme heat safety reminders.",
-            "images/hero-drought.png", "View Advisories", () -> showContentPage("Advisory"));
+            "View Advisories", () -> showContentPage("Advisory"));
 
         addInteractiveHomeCard(cardGrid, "＋", "PREPAREDNESS GUIDES", new Color(2, 132, 199),
             "Practical household checklists, emergency water storage, and cooling tips.",
-            "images/emergency-supplies.png", "Open Guides", () -> showContentPage("Guide"));
+            "Open Guides", () -> showContentPage("Guide"));
 
         addInteractiveHomeCard(cardGrid, "★", "PREPAREDNESS QUIZ", new Color(217, 119, 6),
-            "Challenge yourself with timed questions, streaks, and instant explanations.",
-            null, "Start Quiz", this::showQuiz);
+            "Challenge yourself with interactive questions and instant explanations.",
+            "Start Quiz", this::showQuiz);
 
         centerSection.add(cardGrid, BorderLayout.CENTER);
 
-        // Original text-based preparedness reminder (restored; no tip image).
         RoundedPanel reminderBar = new RoundedPanel(12, SOLAR_SOFT, new Color(253, 230, 138));
         reminderBar.setLayout(new BorderLayout(8, 4));
         reminderBar.setBorder(new EmptyBorder(14, 18, 14, 18));
@@ -413,21 +412,21 @@ public class SinagApp extends JFrame {
     }
 
     private void addInteractiveHomeCard(JPanel parentGrid, String icon, String title, Color accentColor,
-                                        String desc, String imagePath, String buttonText, Runnable onClickAction) {
-        RoundedPanel card = new RoundedPanel(18, Color.WHITE, BORDER_LIGHT);
-        card.setLayout(new BorderLayout(8, 10));
-        card.setBorder(new EmptyBorder(18, 20, 16, 20));
+                                        String desc, String buttonText, Runnable onClickAction) {
+        RoundedPanel card = new RoundedPanel(14, Color.WHITE, BORDER_LIGHT);
+        card.setLayout(new BorderLayout(0, 12));
+        card.setBorder(new EmptyBorder(20, 22, 18, 22));
         card.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
 
         JPanel cardHeader = new JPanel(new FlowLayout(FlowLayout.LEFT, 0, 0));
         cardHeader.setOpaque(false);
 
-        JLabel iconBadge = new JLabel(" " + icon + " ");
-        iconBadge.setFont(new Font("SansSerif", Font.BOLD, 16));
+        JLabel iconBadge = new JLabel(icon);
+        iconBadge.setFont(new Font("SansSerif", Font.BOLD, 14));
         iconBadge.setForeground(accentColor);
 
-        JLabel titleLabel = new JLabel("  " + title);
-        titleLabel.setFont(new Font("SansSerif", Font.BOLD, 13));
+        JLabel titleLabel = new JLabel("   " + title);
+        titleLabel.setFont(new Font("SansSerif", Font.BOLD, 12));
         titleLabel.setForeground(OCEAN_DARK);
 
         cardHeader.add(iconBadge);
@@ -440,9 +439,12 @@ public class SinagApp extends JFrame {
         descArea.setOpaque(false);
         descArea.setForeground(TEXT_MUTED);
         descArea.setFont(new Font("SansSerif", Font.PLAIN, 12));
+        descArea.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
 
         JButton openBtn = createStyledButton(buttonText + "  →", TEAL_SOFT);
-        openBtn.setForeground(TEAL_PRIMARY);
+        openBtn.setForeground(new Color(15, 118, 110));
+        openBtn.setFont(new Font("SansSerif", Font.BOLD, 12));
+        openBtn.setBorder(new EmptyBorder(10, 16, 10, 16));
         openBtn.addActionListener(e -> onClickAction.run());
 
         MouseAdapter hoverEffect = new MouseAdapter() {
@@ -465,17 +467,7 @@ public class SinagApp extends JFrame {
         descArea.addMouseListener(hoverEffect);
 
         card.add(cardHeader, BorderLayout.NORTH);
-
-        JPanel cardBody = new JPanel(new BorderLayout(0, 7));
-        cardBody.setOpaque(false);
-        if (imagePath != null) {
-            JLabel thumbnail = new JLabel(loadImageIcon(imagePath, 150, 68));
-            thumbnail.setHorizontalAlignment(SwingConstants.LEFT);
-            cardBody.add(thumbnail, BorderLayout.NORTH);
-        }
-        cardBody.add(descArea, BorderLayout.CENTER);
-
-        card.add(cardBody, BorderLayout.CENTER);
+        card.add(descArea, BorderLayout.CENTER);
         card.add(openBtn, BorderLayout.SOUTH);
 
         parentGrid.add(card);
