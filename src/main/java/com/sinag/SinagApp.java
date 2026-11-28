@@ -6,13 +6,19 @@ import javax.swing.border.EmptyBorder;
 import javax.swing.table.DefaultTableCellRenderer;
 import javax.swing.table.DefaultTableModel;
 import java.awt.*;
+import java.awt.event.FocusAdapter;
+import java.awt.event.FocusEvent;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
+import java.awt.geom.Path2D;
+import java.awt.geom.RoundRectangle2D;
 import java.awt.image.BufferedImage;
 import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.sql.SQLException;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Base64;
 import java.util.Collections;
@@ -20,28 +26,26 @@ import java.util.List;
 
 /**
  * Modern, interactive Swing UI for SINAG: El Niño Awareness and Preparedness System.
- * Theme: Solar Amber (heat/sunlight awareness) + Deep Ocean & Teal (water conservation & readiness).
+ * Styled with deep navy sidebar, hero banner, gradient dashboard cards, and unified content reader.
  */
 public class SinagApp extends JFrame {
 
-    // --- EL NIÑO CLIMATE & SOLAR THEME PALETTE ---
-    private static final Color OCEAN_DARK   = new Color(15, 41, 58);     // Header & primary headings
-    private static final Color OCEAN_MID    = new Color(26, 58, 79);     // Secondary dark accents
-    private static final Color TEAL_PRIMARY = new Color(13, 148, 136);   // Action buttons & water theme
-    private static final Color TEAL_SOFT    = new Color(204, 244, 237);  // Soft highlight tint
-    private static final Color SOLAR_AMBER  = new Color(245, 158, 11);   // "Sinag" sunlight accent
-    private static final Color SOLAR_SOFT   = new Color(254, 243, 199);  // Warm alert banner background
-    private static final Color SOLAR_TEXT   = new Color(146, 64, 14);    // Warm dark amber text
-    private static final Color BG_CANVAS    = new Color(244, 247, 250);  // Clean off-white workspace
-    private static final Color SIDEBAR_BG   = new Color(235, 241, 246);  // Soft slate sidebar
-    private static final Color TEXT_MAIN    = new Color(30, 41, 59);     // Readable dark slate body
-    private static final Color TEXT_MUTED   = new Color(100, 116, 139);  // Subtitles & metadata
-    private static final Color BORDER_LIGHT = new Color(218, 227, 235);  // Subtle card borders
+    // --- THEME PALETTE ---
+    private static final Color NAVY_TOP      = new Color(8, 43, 82);
+    private static final Color NAVY_BOTTOM   = new Color(4, 24, 52);
+    private static final Color TEAL_PRIMARY  = new Color(13, 148, 136);
+    private static final Color SOLAR_GOLD    = new Color(247, 194, 50);
+    private static final Color SOLAR_GOLD_DK = new Color(224, 162, 22);
+    private static final Color BG_CANVAS     = new Color(241, 246, 252);
+    private static final Color SIDEBAR_BG    = new Color(235, 241, 246);
+    private static final Color TEXT_MAIN     = new Color(24, 39, 63);
+    private static final Color TEXT_MUTED    = new Color(92, 108, 132);
+    private static final Color BORDER_LIGHT  = new Color(214, 224, 236);
 
     // --- CORE SERVICES & STATE ---
     private final Database db = new Database();
     private final JPanel mainContentArea = new JPanel(new BorderLayout());
-    private final List<JButton> navButtons = new ArrayList<>();
+    private final List<NavPillButton> navButtons = new ArrayList<>();
     private String activeMenuKey = "Home";
 
     // --- QUIZ STATE ---
@@ -56,28 +60,35 @@ public class SinagApp extends JFrame {
     private boolean fiftyFiftyUsed = false;
 
     public SinagApp() {
-        setTitle("SINAG: El Niño Awareness and Preparedness System");
+        setTitle("SINAG – El Niño Awareness and Preparedness System");
         setDefaultCloseOperation(EXIT_ON_CLOSE);
-        setSize(1200, 780);
-        setMinimumSize(new Dimension(960, 650));
+        setSize(1240, 800);
+        setMinimumSize(new Dimension(1020, 680));
         setLocationRelativeTo(null);
-        getContentPane().setBackground(BG_CANVAS);
+        getContentPane().setBackground(NAVY_TOP);
         setLayout(new BorderLayout());
 
-        add(createHeader(), BorderLayout.NORTH);
         add(createSidebar(), BorderLayout.WEST);
 
-        mainContentArea.setBackground(BG_CANVAS);
-        add(mainContentArea, BorderLayout.CENTER);
+        JPanel rightShell = new JPanel(new BorderLayout());
+        rightShell.setBackground(NAVY_TOP);
+        rightShell.add(createHeader(), BorderLayout.NORTH);
+
+        RoundedWorkspacePanel workspaceWrapper = new RoundedWorkspacePanel();
+        workspaceWrapper.setLayout(new BorderLayout());
+        mainContentArea.setOpaque(false);
+        workspaceWrapper.add(mainContentArea, BorderLayout.CENTER);
+
+        rightShell.add(workspaceWrapper, BorderLayout.CENTER);
+        add(rightShell, BorderLayout.CENTER);
 
         showHome();
     }
 
     // =========================================================================
-    // 1. TOP HEADER & INTERACTIVE SIDEBAR
+    // 1. TOP UTILITY HEADER & FULL-HEIGHT NAVY SIDEBAR
     // =========================================================================
 
-    /** Loads an image from the project images folder or Maven resources. */
     private ImageIcon loadImageIcon(String relativePath, int width, int height) {
         try {
             String fileName = relativePath.substring(relativePath.lastIndexOf('/') + 1);
@@ -99,75 +110,162 @@ public class SinagApp extends JFrame {
                 if (resource != null) original = ImageIO.read(resource);
             }
             if (original == null) {
-                System.err.println("SINAG image not found: " + relativePath);
-                return new ImageIcon();
+                return null;
             }
             Image scaled = original.getScaledInstance(width, height, Image.SCALE_SMOOTH);
             return new ImageIcon(scaled);
         } catch (Exception ex) {
-            System.err.println("Could not load " + relativePath + ": " + ex.getMessage());
-            return new ImageIcon();
+            return null;
         }
     }
 
     private JPanel createHeader() {
-        JPanel header = new JPanel(new BorderLayout());
-        header.setBackground(OCEAN_DARK);
-        header.setBorder(BorderFactory.createCompoundBorder(
-            BorderFactory.createMatteBorder(0, 0, 3, 0, SOLAR_AMBER),
-            new EmptyBorder(12, 26, 12, 26)
-        ));
+        JPanel header = new JPanel(new BorderLayout()) {
+            @Override
+            protected void paintComponent(Graphics g) {
+                Graphics2D g2 = (Graphics2D) g.create();
+                g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+                g2.setPaint(new GradientPaint(0, 0, NAVY_TOP, getWidth(), 0, new Color(14, 52, 96)));
+                g2.fillRect(0, 0, getWidth(), getHeight());
 
-        JPanel brandPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 0, 0));
-        brandPanel.setOpaque(false);
+                g2.setColor(new Color(255, 255, 255, 10));
+                Path2D wave = new Path2D.Double();
+                wave.moveTo(0, getHeight() * 0.7);
+                wave.curveTo(getWidth() * 0.35, getHeight() * 0.2, getWidth() * 0.65, getHeight() * 0.95, getWidth(), getHeight() * 0.35);
+                wave.lineTo(getWidth(), getHeight());
+                wave.lineTo(0, getHeight());
+                wave.closePath();
+                g2.fill(wave);
+                g2.dispose();
+            }
+        };
+        header.setPreferredSize(new Dimension(0, 66));
+        header.setBorder(new EmptyBorder(0, 28, 0, 28));
 
-        JLabel logo = new JLabel(loadImageIcon("images/sinag-logo.jpg", 64, 72));
-        logo.setBorder(new EmptyBorder(0, 0, 0, 12));
-
-        JLabel tagline = new JLabel("   |   EL NIÑO AWARENESS & COMMUNITY READINESS");
+        JLabel tagline = new JLabel("EL NIÑO AWARENESS   •   COMMUNITY READINESS");
         tagline.setFont(new Font("SansSerif", Font.BOLD, 11));
-        tagline.setForeground(new Color(186, 214, 226));
+        tagline.setForeground(new Color(214, 228, 245));
+        header.add(tagline, BorderLayout.WEST);
 
-        brandPanel.add(logo);
-        brandPanel.add(tagline);
+        JPanel rightControls = new JPanel(new FlowLayout(FlowLayout.RIGHT, 10, 13));
+        rightControls.setOpaque(false);
 
-        // Wrap adminBtn in a GridBagLayout panel so BorderLayout.EAST does not stretch it vertically
-        JPanel rightWrapper = new JPanel(new GridBagLayout());
-        rightWrapper.setOpaque(false);
-
-        JButton adminBtn = createStyledButton("⚙  ADMIN PORTAL", TEAL_PRIMARY);
-        adminBtn.setBorder(new EmptyBorder(10, 18, 10, 18));
+        PillButton adminBtn = new PillButton("🛡  Admin Portal", SOLAR_GOLD, SOLAR_GOLD_DK, NAVY_BOTTOM);
+        adminBtn.setFont(new Font("SansSerif", Font.BOLD, 12));
+        adminBtn.setBorder(new EmptyBorder(9, 18, 9, 18));
         adminBtn.addActionListener(e -> openAdminLogin());
-        rightWrapper.add(adminBtn);
 
-        header.add(brandPanel, BorderLayout.WEST);
-        header.add(rightWrapper, BorderLayout.EAST);
+        JLabel profileBadge = new JLabel("👤", SwingConstants.CENTER) {
+            @Override
+            protected void paintComponent(Graphics g) {
+                Graphics2D g2 = (Graphics2D) g.create();
+                g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+                g2.setColor(new Color(255, 255, 255, 215));
+                g2.fillOval(0, 0, getWidth() - 1, getHeight() - 1);
+                g2.dispose();
+                super.paintComponent(g);
+            }
+        };
+        profileBadge.setPreferredSize(new Dimension(34, 34));
+        profileBadge.setFont(new Font("SansSerif", Font.PLAIN, 15));
+        profileBadge.setForeground(NAVY_TOP);
+        profileBadge.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
+        profileBadge.setToolTipText("Administrator Login");
+        profileBadge.addMouseListener(new MouseAdapter() {
+            @Override
+            public void mouseClicked(MouseEvent e) {
+                openAdminLogin();
+            }
+        });
+
+        rightControls.add(adminBtn);
+        rightControls.add(profileBadge);
+        header.add(rightControls, BorderLayout.EAST);
+
         return header;
     }
 
     private JPanel createSidebar() {
-        JPanel sidebar = new JPanel();
-        sidebar.setPreferredSize(new Dimension(240, 0));
-        sidebar.setBackground(SIDEBAR_BG);
-        sidebar.setBorder(BorderFactory.createCompoundBorder(
-            BorderFactory.createMatteBorder(0, 0, 0, 1, BORDER_LIGHT),
-            new EmptyBorder(20, 14, 18, 14)
-        ));
+        JPanel sidebar = new JPanel() {
+            @Override
+            protected void paintComponent(Graphics g) {
+                Graphics2D g2 = (Graphics2D) g.create();
+                g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+                g2.setPaint(new GradientPaint(0, 0, NAVY_TOP, 0, getHeight(), NAVY_BOTTOM));
+                g2.fillRect(0, 0, getWidth(), getHeight());
+
+                int h = getHeight();
+                int w = getWidth();
+                Path2D goldWave = new Path2D.Double();
+                goldWave.moveTo(0, h - 108);
+                goldWave.curveTo(w * 0.35, h - 85, w * 0.65, h - 140, w, h - 122);
+                goldWave.lineTo(w, h - 98);
+                goldWave.curveTo(w * 0.65, h - 118, w * 0.35, h - 68, 0, h - 94);
+                goldWave.closePath();
+                g2.setPaint(new GradientPaint(0, h - 130, new Color(245, 158, 11, 180), w, h - 90, SOLAR_GOLD));
+                g2.fill(goldWave);
+
+                g2.setColor(new Color(56, 189, 248, 70));
+                g2.setStroke(new BasicStroke(1.5f));
+                Path2D pulse = new Path2D.Double();
+                int py = h - 78;
+                pulse.moveTo(0, py);
+                pulse.lineTo(28, py);
+                pulse.lineTo(35, py - 12);
+                pulse.lineTo(42, py + 10);
+                pulse.lineTo(49, py - 6);
+                pulse.lineTo(55, py);
+                pulse.lineTo(w, py);
+                g2.draw(pulse);
+
+                g2.dispose();
+            }
+        };
+        sidebar.setPreferredSize(new Dimension(235, 0));
+        sidebar.setBorder(new EmptyBorder(22, 16, 20, 16));
         sidebar.setLayout(new BoxLayout(sidebar, BoxLayout.Y_AXIS));
 
-        JLabel menuLabel = new JLabel("NAVIGATION");
-        menuLabel.setFont(new Font("SansSerif", Font.BOLD, 10));
-        menuLabel.setForeground(TEXT_MUTED);
-        menuLabel.setAlignmentX(Component.LEFT_ALIGNMENT);
-        menuLabel.setBorder(new EmptyBorder(0, 10, 10, 0));
-        sidebar.add(menuLabel);
+        JPanel brandBox = new JPanel();
+        brandBox.setOpaque(false);
+        brandBox.setLayout(new BoxLayout(brandBox, BoxLayout.Y_AXIS));
+        brandBox.setAlignmentX(Component.CENTER_ALIGNMENT);
+
+        ImageIcon customLogo = loadImageIcon("images/sinag-logo.jpg", 94, 94);
+        if (customLogo != null && customLogo.getIconWidth() > 0) {
+            JLabel logoImg = new JLabel(customLogo);
+            logoImg.setAlignmentX(Component.CENTER_ALIGNMENT);
+            brandBox.add(logoImg);
+        } else {
+            JLabel sunIcon = new JLabel("☀");
+            sunIcon.setFont(new Font("SansSerif", Font.BOLD, 38));
+            sunIcon.setForeground(SOLAR_GOLD);
+            sunIcon.setAlignmentX(Component.CENTER_ALIGNMENT);
+
+            JLabel brandName = new JLabel("SINAG");
+            brandName.setFont(new Font("SansSerif", Font.BOLD, 28));
+            brandName.setForeground(Color.WHITE);
+            brandName.setAlignmentX(Component.CENTER_ALIGNMENT);
+
+            brandBox.add(sunIcon);
+            brandBox.add(brandName);
+        }
+
+        JLabel brandTag = new JLabel("Be Ready. Stay Safe.");
+        brandTag.setFont(new Font("SansSerif", Font.BOLD, 11));
+        brandTag.setForeground(SOLAR_GOLD);
+        brandTag.setAlignmentX(Component.CENTER_ALIGNMENT);
+        brandBox.add(Box.createVerticalStrut(4));
+        brandBox.add(brandTag);
+
+        sidebar.add(brandBox);
+        sidebar.add(Box.createVerticalStrut(24));
 
         String[][] menuItems = {
             {"⌂", "Home", "Home"},
             {"▤", "Articles", "Article"},
-            {"⚑", "Advisories", "Advisory"},
+            {"⚠", "Advisories", "Advisory"},
             {"?", "FAQs", "FAQ"},
-            {"＋", "Preparedness Guides", "Guide"},
+            {"☰", "Preparedness Guide", "Guide"},
             {"★", "Preparedness Quiz", "Quiz"},
             {"ⓘ", "About SINAG", "About"}
         };
@@ -178,30 +276,9 @@ public class SinagApp extends JFrame {
             String label = item[1];
             String pageKey = item[2];
 
-            JButton btn = new JButton(icon + "   " + label);
-            btn.setActionCommand(pageKey);
-            btn.setHorizontalAlignment(SwingConstants.LEFT);
-            btn.setAlignmentX(Component.LEFT_ALIGNMENT);
-            btn.setFont(new Font("SansSerif", Font.BOLD, 12));
-            btn.setFocusPainted(false);
-            btn.setOpaque(true);
-            btn.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
+            NavPillButton btn = new NavPillButton(icon, label, pageKey);
+            btn.setAlignmentX(Component.CENTER_ALIGNMENT);
             btn.setMaximumSize(new Dimension(Integer.MAX_VALUE, 42));
-
-            btn.addMouseListener(new MouseAdapter() {
-                @Override
-                public void mouseEntered(MouseEvent e) {
-                    if (!pageKey.equals(activeMenuKey)) {
-                        btn.setBackground(new Color(222, 232, 240));
-                    }
-                }
-                @Override
-                public void mouseExited(MouseEvent e) {
-                    if (!pageKey.equals(activeMenuKey)) {
-                        btn.setBackground(SIDEBAR_BG);
-                    }
-                }
-            });
 
             btn.addActionListener(e -> {
                 setActiveNav(pageKey);
@@ -215,16 +292,33 @@ public class SinagApp extends JFrame {
 
             navButtons.add(btn);
             sidebar.add(btn);
-            sidebar.add(Box.createVerticalStrut(5));
+            sidebar.add(Box.createVerticalStrut(6));
         }
 
         setActiveNav(activeMenuKey);
         sidebar.add(Box.createVerticalGlue());
 
-        JButton exitBtn = createStyledButton("⏻  Exit Application", OCEAN_MID);
-        exitBtn.setHorizontalAlignment(SwingConstants.LEFT);
-        exitBtn.setAlignmentX(Component.LEFT_ALIGNMENT);
-        exitBtn.setMaximumSize(new Dimension(Integer.MAX_VALUE, 42));
+        JButton exitBtn = new JButton("⚙   Exit Application") {
+            @Override
+            protected void paintComponent(Graphics g) {
+                Graphics2D g2 = (Graphics2D) g.create();
+                g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+                g2.setColor(getModel().isRollover() ? new Color(255, 255, 255, 25) : new Color(6, 28, 58));
+                g2.fillRoundRect(0, 0, getWidth() - 1, getHeight() - 1, getHeight(), getHeight());
+                g2.setColor(new Color(148, 178, 214, 130));
+                g2.drawRoundRect(0, 0, getWidth() - 1, getHeight() - 1, getHeight(), getHeight());
+                g2.dispose();
+                super.paintComponent(g);
+            }
+        };
+        exitBtn.setFont(new Font("SansSerif", Font.BOLD, 12));
+        exitBtn.setForeground(Color.WHITE);
+        exitBtn.setContentAreaFilled(false);
+        exitBtn.setBorderPainted(false);
+        exitBtn.setFocusPainted(false);
+        exitBtn.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
+        exitBtn.setAlignmentX(Component.CENTER_ALIGNMENT);
+        exitBtn.setMaximumSize(new Dimension(Integer.MAX_VALUE, 40));
         exitBtn.addActionListener(e -> dispose());
         sidebar.add(exitBtn);
 
@@ -233,89 +327,118 @@ public class SinagApp extends JFrame {
 
     private void setActiveNav(String key) {
         activeMenuKey = key;
-        for (JButton btn : navButtons) {
-            boolean isActive = btn.getActionCommand().equals(key);
-            if (isActive) {
-                btn.setBackground(Color.WHITE);
-                btn.setForeground(TEAL_PRIMARY);
-                btn.setBorder(BorderFactory.createCompoundBorder(
-                    BorderFactory.createMatteBorder(0, 4, 0, 0, SOLAR_AMBER),
-                    new EmptyBorder(10, 10, 10, 8)
-                ));
-            } else {
-                btn.setBackground(SIDEBAR_BG);
-                btn.setForeground(OCEAN_DARK);
-                btn.setBorder(new EmptyBorder(10, 14, 10, 8));
-            }
+        for (NavPillButton btn : navButtons) {
+            btn.setActive(btn.getPageKey().equals(key));
         }
     }
 
     // =========================================================================
-    // 2. HOME DASHBOARD (Hero + Live Weather Widget + Interactive Cards)
+    // 2. HOME DASHBOARD (Hero Banner + Glass Weather Card + Gradient Modules)
     // =========================================================================
 
     private void showHome() {
         setActiveNav("Home");
-        JPanel homePanel = new JPanel(new BorderLayout(0, 18));
-        homePanel.setBackground(BG_CANVAS);
-        homePanel.setBorder(new EmptyBorder(20, 28, 20, 28));
+        JPanel homePanel = new JPanel(new BorderLayout(0, 16));
+        homePanel.setOpaque(false);
+        homePanel.setBorder(new EmptyBorder(20, 26, 18, 26));
 
-        // Hero Banner (Natural height so it never squishes the center grid)
-        GradientPanel heroBanner = new GradientPanel("images/hero-drought.png");
+        HeroBannerPanel heroBanner = new HeroBannerPanel("images/hero-drought.png");
         heroBanner.setLayout(new BorderLayout(20, 0));
-        heroBanner.setBorder(new EmptyBorder(22, 28, 22, 28));
+        heroBanner.setBorder(new EmptyBorder(22, 28, 22, 24));
 
-        JPanel heroText = new JPanel();
-        heroText.setOpaque(false);
-        heroText.setLayout(new BoxLayout(heroText, BoxLayout.Y_AXIS));
+        JPanel heroLeft = new JPanel();
+        heroLeft.setOpaque(false);
+        heroLeft.setLayout(new BoxLayout(heroLeft, BoxLayout.Y_AXIS));
 
-        JLabel eyebrow = new JLabel("EL NIÑO  •  CLIMATE AWARENESS  •  HOUSEHOLD READINESS");
-        eyebrow.setForeground(new Color(253, 230, 138));
-        eyebrow.setFont(new Font("SansSerif", Font.BOLD, 10));
+        JLabel sinagPill = new JLabel("SINAG", SwingConstants.CENTER) {
+            @Override
+            protected void paintComponent(Graphics g) {
+                Graphics2D g2 = (Graphics2D) g.create();
+                g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+                g2.setColor(SOLAR_GOLD);
+                g2.fillRoundRect(0, 0, getWidth(), getHeight(), getHeight(), getHeight());
+                g2.dispose();
+                super.paintComponent(g);
+            }
+        };
+        sinagPill.setFont(new Font("SansSerif", Font.BOLD, 10));
+        sinagPill.setForeground(NAVY_BOTTOM);
+        sinagPill.setBorder(new EmptyBorder(4, 14, 4, 14));
+        sinagPill.setAlignmentX(Component.LEFT_ALIGNMENT);
 
-        JLabel title = new JLabel("Be informed. Be prepared. Stay safe.");
-        title.setForeground(Color.WHITE);
-        title.setFont(new Font("SansSerif", Font.BOLD, 25));
+        JLabel heroHeadline = new JLabel("<html><span style='color:#FFFFFF;'>Be informed. Be prepared. </span><span style='color:#F7C232;'>Stay safe.</span></html>");
+        heroHeadline.setFont(new Font("SansSerif", Font.BOLD, 27));
+        heroHeadline.setAlignmentX(Component.LEFT_ALIGNMENT);
 
-        JLabel subtitle = new JLabel("Actionable climate knowledge, water-saving advisories, and readiness guides.");
-        subtitle.setForeground(new Color(224, 242, 254));
-        subtitle.setFont(new Font("SansSerif", Font.PLAIN, 13));
+        JLabel heroSub = new JLabel("<html><div style='width:460px; color:#E2EEFA; line-height:1.35;'>"
+                + "Access reliable information, helpful guides, and real-time advisories<br>"
+                + "to keep you and your community safe during El Niño conditions.</div></html>");
+        heroSub.setFont(new Font("SansSerif", Font.PLAIN, 13));
+        heroSub.setAlignmentX(Component.LEFT_ALIGNMENT);
 
-        heroText.add(eyebrow);
-        heroText.add(Box.createVerticalStrut(8));
-        heroText.add(title);
-        heroText.add(Box.createVerticalStrut(6));
-        heroText.add(subtitle);
-        heroBanner.add(heroText, BorderLayout.CENTER);
+        heroLeft.add(sinagPill);
+        heroLeft.add(Box.createVerticalStrut(12));
+        heroLeft.add(heroHeadline);
+        heroLeft.add(Box.createVerticalStrut(8));
+        heroLeft.add(heroSub);
+        heroBanner.add(heroLeft, BorderLayout.CENTER);
 
-        // Right-side Live Weather Card inside Hero
-        RoundedPanel weatherCard = new RoundedPanel(16, new Color(15, 41, 58, 170), new Color(255, 255, 255, 60));
-        weatherCard.setLayout(new BoxLayout(weatherCard, BoxLayout.Y_AXIS));
-        weatherCard.setBorder(new EmptyBorder(12, 18, 12, 18));
+        GlassWeatherPanel weatherCard = new GlassWeatherPanel();
+        weatherCard.setPreferredSize(new Dimension(235, 145));
+        weatherCard.setLayout(new BorderLayout(0, 8));
+        weatherCard.setBorder(new EmptyBorder(14, 18, 12, 18));
 
-        JLabel weatherBadge = new JLabel("☀ LIVE WEATHER");
-        weatherBadge.setFont(new Font("SansSerif", Font.BOLD, 10));
-        weatherBadge.setForeground(SOLAR_AMBER);
-        weatherBadge.setAlignmentX(Component.RIGHT_ALIGNMENT);
+        JPanel weatherTop = new JPanel(new BorderLayout(10, 0));
+        weatherTop.setOpaque(false);
 
-        JLabel weatherTemp = new JLabel("Loading...");
-        weatherTemp.setFont(new Font("SansSerif", Font.BOLD, 24));
+        JLabel sunWeatherGraphic = new SunCloudGraphic();
+        sunWeatherGraphic.setPreferredSize(new Dimension(54, 46));
+
+        JPanel tempStack = new JPanel();
+        tempStack.setOpaque(false);
+        tempStack.setLayout(new BoxLayout(tempStack, BoxLayout.Y_AXIS));
+
+        JLabel weatherTemp = new JLabel("--.-°C");
+        weatherTemp.setFont(new Font("SansSerif", Font.BOLD, 28));
         weatherTemp.setForeground(Color.WHITE);
-        weatherTemp.setAlignmentX(Component.RIGHT_ALIGNMENT);
 
-        JLabel weatherDetails = new JLabel("Batangas City");
-        weatherDetails.setFont(new Font("SansSerif", Font.PLAIN, 11));
-        weatherDetails.setForeground(new Color(204, 244, 237));
-        weatherDetails.setAlignmentX(Component.RIGHT_ALIGNMENT);
+        JLabel weatherCondition = new JLabel("Partly Cloudy");
+        weatherCondition.setFont(new Font("SansSerif", Font.PLAIN, 12));
+        weatherCondition.setForeground(new Color(230, 240, 252));
 
-        weatherCard.add(weatherBadge);
-        weatherCard.add(Box.createVerticalStrut(4));
-        weatherCard.add(weatherTemp);
-        weatherCard.add(Box.createVerticalStrut(4));
-        weatherCard.add(weatherDetails);
+        tempStack.add(weatherTemp);
+        tempStack.add(weatherCondition);
+
+        weatherTop.add(sunWeatherGraphic, BorderLayout.WEST);
+        weatherTop.add(tempStack, BorderLayout.CENTER);
+
+        JPanel weatherBottom = new JPanel();
+        weatherBottom.setOpaque(false);
+        weatherBottom.setLayout(new BoxLayout(weatherBottom, BoxLayout.Y_AXIS));
+        weatherBottom.setBorder(BorderFactory.createCompoundBorder(
+            BorderFactory.createMatteBorder(1, 0, 0, 0, new Color(255, 255, 255, 65)),
+            new EmptyBorder(8, 0, 0, 0)
+        ));
+
+        JLabel locationLabel = new JLabel("📍  Batangas City, PH", SwingConstants.CENTER);
+        locationLabel.setFont(new Font("SansSerif", Font.BOLD, 12));
+        locationLabel.setForeground(Color.WHITE);
+        locationLabel.setAlignmentX(Component.CENTER_ALIGNMENT);
+
+        String nowStamp = LocalDateTime.now().format(DateTimeFormatter.ofPattern("MMM dd, yyyy • hh:mm a"));
+        JLabel updatedLabel = new JLabel("Last updated: " + nowStamp, SwingConstants.CENTER);
+        updatedLabel.setFont(new Font("SansSerif", Font.PLAIN, 10));
+        updatedLabel.setForeground(new Color(218, 232, 248));
+        updatedLabel.setAlignmentX(Component.CENTER_ALIGNMENT);
+
+        weatherBottom.add(locationLabel);
+        weatherBottom.add(Box.createVerticalStrut(3));
+        weatherBottom.add(updatedLabel);
+
+        weatherCard.add(weatherTop, BorderLayout.CENTER);
+        weatherCard.add(weatherBottom, BorderLayout.SOUTH);
         heroBanner.add(weatherCard, BorderLayout.EAST);
 
-        // Fetch live weather asynchronously
         new SwingWorker<String, Void>() {
             @Override
             protected String doInBackground() {
@@ -329,71 +452,130 @@ public class SinagApp extends JFrame {
                     if (fullText.contains(": ") && fullText.contains("°C")) {
                         String afterCity = fullText.substring(fullText.indexOf(": ") + 2);
                         String tempPart = afterCity.substring(0, afterCity.indexOf("°C") + 2);
-                        String extraPart = afterCity.substring(afterCity.indexOf("°C") + 2).trim();
+                        String extraPart = afterCity.substring(afterCity.indexOf("°C") + 2).replace("(", "").replace(")", "").trim();
                         weatherTemp.setText(tempPart);
-                        weatherDetails.setText("Batangas City " + extraPart);
-                    } else {
-                        weatherTemp.setText("--°C");
-                        weatherDetails.setText(fullText);
+                        if (!extraPart.isBlank()) {
+                            weatherCondition.setText(extraPart);
+                        }
                     }
-                } catch (Exception ex) {
-                    weatherTemp.setText("--°C");
-                    weatherDetails.setText("Weather unavailable");
+                } catch (Exception ignored) {
                 }
             }
         }.execute();
 
-        // Center Section: 2x2 Interactive Feature Cards
-        JPanel centerSection = new JPanel(new BorderLayout(0, 14));
+        JPanel centerSection = new JPanel(new BorderLayout(0, 12));
         centerSection.setOpaque(false);
 
-        JPanel sectionHeading = new JPanel();
+        JPanel sectionHeading = new JPanel(new BorderLayout(10, 0));
         sectionHeading.setOpaque(false);
-        sectionHeading.setLayout(new BoxLayout(sectionHeading, BoxLayout.Y_AXIS));
+
+        JPanel accentBar = new JPanel() {
+            @Override
+            protected void paintComponent(Graphics g) {
+                Graphics2D g2 = (Graphics2D) g.create();
+                g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+                g2.setColor(SOLAR_GOLD);
+                g2.fillRoundRect(0, 2, 4, getHeight() - 4, 4, 4);
+                g2.dispose();
+            }
+        };
+        accentBar.setOpaque(false);
+        accentBar.setPreferredSize(new Dimension(6, 40));
+
+        JPanel headingTexts = new JPanel();
+        headingTexts.setOpaque(false);
+        headingTexts.setLayout(new BoxLayout(headingTexts, BoxLayout.Y_AXIS));
 
         JLabel exploreTitle = new JLabel("Explore SINAG Modules");
-        exploreTitle.setFont(new Font("SansSerif", Font.BOLD, 20));
-        exploreTitle.setForeground(OCEAN_DARK);
+        exploreTitle.setFont(new Font("SansSerif", Font.BOLD, 21));
+        exploreTitle.setForeground(NAVY_BOTTOM);
 
-        JLabel exploreSub = new JLabel("Click any module below to read climate guides or test your preparedness.");
+        JLabel exploreSub = new JLabel("Click any module below to find useful guides and tools for your preparedness.");
         exploreSub.setFont(new Font("SansSerif", Font.PLAIN, 12));
         exploreSub.setForeground(TEXT_MUTED);
 
-        sectionHeading.add(exploreTitle);
-        sectionHeading.add(Box.createVerticalStrut(4));
-        sectionHeading.add(exploreSub);
+        headingTexts.add(exploreTitle);
+        headingTexts.add(Box.createVerticalStrut(2));
+        headingTexts.add(exploreSub);
+
+        sectionHeading.add(accentBar, BorderLayout.WEST);
+        sectionHeading.add(headingTexts, BorderLayout.CENTER);
         centerSection.add(sectionHeading, BorderLayout.NORTH);
 
-        JPanel cardGrid = new JPanel(new GridLayout(2, 2, 16, 16));
+        JPanel cardGrid = new JPanel(new GridLayout(2, 2, 18, 16));
         cardGrid.setOpaque(false);
 
-        addInteractiveHomeCard(cardGrid, "▤", "EDUCATIONAL ARTICLES", TEAL_PRIMARY,
-            "Understand what El Niño is, its global climate drivers, and local impacts.",
-            "Explore Articles", () -> showContentPage("Article"));
+        addDashboardModuleCard(
+            cardGrid,
+            ModuleCardStyle.BLUE,
+            "Educational Articles",
+            "Learn about El Niño risks, safety tips, and preparedness measures.",
+            "Explore Articles →",
+            () -> showContentPage("Article")
+        );
 
-        addInteractiveHomeCard(cardGrid, "⚑", "PUBLIC ADVISORIES", SOLAR_AMBER,
-            "Stay updated on water conservation alerts and extreme heat safety reminders.",
-            "View Advisories", () -> showContentPage("Advisory"));
+        addDashboardModuleCard(
+            cardGrid,
+            ModuleCardStyle.GREEN,
+            "Public Advisories",
+            "Stay updated on water conservation alerts and extreme weather reminders.",
+            "View Advisories →",
+            () -> showContentPage("Advisory")
+        );
 
-        addInteractiveHomeCard(cardGrid, "＋", "PREPAREDNESS GUIDES", new Color(2, 132, 199),
+        addDashboardModuleCard(
+            cardGrid,
+            ModuleCardStyle.PURPLE,
+            "Preparedness Guides",
             "Practical household checklists, emergency water storage, and cooling tips.",
-            "Open Guides", () -> showContentPage("Guide"));
+            "Open Guides →",
+            () -> showContentPage("Guide")
+        );
 
-        addInteractiveHomeCard(cardGrid, "★", "PREPAREDNESS QUIZ", new Color(217, 119, 6),
-            "Challenge yourself with timed questions, streaks, and instant explanations.",
-            "Start Quiz", this::showQuiz);
+        addDashboardModuleCard(
+            cardGrid,
+            ModuleCardStyle.ORANGE,
+            "Preparedness Quiz",
+            "Challenge yourself with timed questions about climate preparedness.",
+            "Start Quiz →",
+            this::showQuiz
+        );
 
         centerSection.add(cardGrid, BorderLayout.CENTER);
 
-        // Compact Bottom Reminder Bar (Natural height so center cards have full vertical space)
-        RoundedPanel reminderBar = new RoundedPanel(12, SOLAR_SOFT, new Color(253, 230, 138));
-        reminderBar.setLayout(new BorderLayout());
-        reminderBar.setBorder(new EmptyBorder(11, 18, 11, 18));
+        ReminderBannerPanel reminderBar = new ReminderBannerPanel();
+        reminderBar.setLayout(new FlowLayout(FlowLayout.LEFT, 12, 10));
 
-        JLabel reminderText = new JLabel("☀  PREPAREDNESS REMINDER: Conserve water, stay hydrated, and follow verified climate advisories from PAGASA and your local government.");
-        reminderText.setFont(new Font("SansSerif", Font.BOLD, 11));
-        reminderText.setForeground(SOLAR_TEXT);
-        reminderBar.add(reminderText, BorderLayout.CENTER);
+        JLabel warnBadge = new JLabel("▲", SwingConstants.CENTER) {
+            @Override
+            protected void paintComponent(Graphics g) {
+                Graphics2D g2 = (Graphics2D) g.create();
+                g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+                g2.setColor(new Color(146, 64, 14));
+                g2.fillRoundRect(0, 0, getWidth(), getHeight(), 8, 8);
+                g2.dispose();
+                super.paintComponent(g);
+            }
+        };
+        warnBadge.setPreferredSize(new Dimension(24, 24));
+        warnBadge.setFont(new Font("SansSerif", Font.BOLD, 12));
+        warnBadge.setForeground(SOLAR_GOLD);
+
+        JLabel reminderBold = new JLabel("PREPARE TODAY, BE SAFER TOMORROW.");
+        reminderBold.setFont(new Font("SansSerif", Font.BOLD, 12));
+        reminderBold.setForeground(new Color(69, 39, 9));
+
+        JLabel divider = new JLabel("|");
+        divider.setForeground(new Color(180, 130, 40));
+
+        JLabel reminderDesc = new JLabel("Consult official PAGASA and local government updates for the latest information.");
+        reminderDesc.setFont(new Font("SansSerif", Font.PLAIN, 12));
+        reminderDesc.setForeground(new Color(69, 39, 9));
+
+        reminderBar.add(warnBadge);
+        reminderBar.add(reminderBold);
+        reminderBar.add(divider);
+        reminderBar.add(reminderDesc);
 
         homePanel.add(heroBanner, BorderLayout.NORTH);
         homePanel.add(centerSection, BorderLayout.CENTER);
@@ -402,170 +584,368 @@ public class SinagApp extends JFrame {
         switchMainPage(homePanel);
     }
 
-    private void addInteractiveHomeCard(JPanel parentGrid, String icon, String title, Color accentColor,
+    private enum ModuleCardStyle {
+        BLUE(
+            new Color(224, 241, 255), new Color(156, 206, 252), new Color(165, 208, 248),
+            new Color(10, 88, 184), new Color(10, 62, 126), "📖"
+        ),
+        GREEN(
+            new Color(225, 250, 232), new Color(164, 232, 184), new Color(168, 228, 186),
+            new Color(14, 138, 66), new Color(12, 92, 46), "📢"
+        ),
+        PURPLE(
+            new Color(236, 228, 255), new Color(196, 180, 252), new Color(198, 184, 248),
+            new Color(91, 68, 204), new Color(34, 28, 108), "📋"
+        ),
+        ORANGE(
+            new Color(255, 240, 222), new Color(253, 204, 152), new Color(248, 204, 158),
+            new Color(234, 112, 16), new Color(186, 78, 8), "🎮"
+        );
+
+        final Color gradStart;
+        final Color gradEnd;
+        final Color borderColor;
+        final Color circleColor;
+        final Color buttonColor;
+        final String symbol;
+
+        ModuleCardStyle(Color gradStart, Color gradEnd, Color borderColor,
+                        Color circleColor, Color buttonColor, String symbol) {
+            this.gradStart = gradStart;
+            this.gradEnd = gradEnd;
+            this.borderColor = borderColor;
+            this.circleColor = circleColor;
+            this.buttonColor = buttonColor;
+            this.symbol = symbol;
+        }
+    }
+
+    private void addDashboardModuleCard(JPanel parentGrid, ModuleCardStyle style, String title,
                                         String desc, String buttonText, Runnable onClickAction) {
-        RoundedPanel card = new RoundedPanel(16, Color.WHITE, BORDER_LIGHT);
-        card.setLayout(new BorderLayout(0, 10));
-        card.setBorder(new EmptyBorder(18, 22, 16, 22));
-        card.setPreferredSize(new Dimension(0, 155));
+        GradientModuleCard card = new GradientModuleCard(style);
+        card.setLayout(new BorderLayout(16, 0));
+        card.setBorder(new EmptyBorder(16, 20, 16, 18));
         card.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
 
-        JPanel cardHeader = new JPanel(new FlowLayout(FlowLayout.LEFT, 0, 0));
-        cardHeader.setOpaque(false);
+        JPanel badgeWrapper = new JPanel(new GridBagLayout());
+        badgeWrapper.setOpaque(false);
 
-        JLabel iconBadge = new JLabel(icon);
-        iconBadge.setFont(new Font("SansSerif", Font.BOLD, 16));
-        iconBadge.setForeground(accentColor);
+        JLabel circleIcon = new JLabel(style.symbol, SwingConstants.CENTER) {
+            @Override
+            protected void paintComponent(Graphics g) {
+                Graphics2D g2 = (Graphics2D) g.create();
+                g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+                g2.setColor(new Color(255, 255, 255, 110));
+                g2.fillOval(0, 0, getWidth(), getHeight());
+                g2.setPaint(new GradientPaint(0, 0, style.circleColor.brighter(), getWidth(), getHeight(), style.circleColor.darker()));
+                g2.fillOval(5, 5, getWidth() - 10, getHeight() - 10);
+                g2.dispose();
+                super.paintComponent(g);
+            }
+        };
+        circleIcon.setPreferredSize(new Dimension(74, 74));
+        circleIcon.setFont(new Font("SansSerif", Font.PLAIN, 28));
+        circleIcon.setForeground(Color.WHITE);
+        badgeWrapper.add(circleIcon);
 
-        JLabel titleLabel = new JLabel("   " + title);
-        titleLabel.setFont(new Font("SansSerif", Font.BOLD, 13));
-        titleLabel.setForeground(OCEAN_DARK);
+        JPanel textColumn = new JPanel();
+        textColumn.setOpaque(false);
+        textColumn.setLayout(new BoxLayout(textColumn, BoxLayout.Y_AXIS));
 
-        cardHeader.add(iconBadge);
-        cardHeader.add(titleLabel);
+        JLabel titleLabel = new JLabel(title);
+        titleLabel.setFont(new Font("SansSerif", Font.BOLD, 17));
+        titleLabel.setForeground(NAVY_BOTTOM);
+        titleLabel.setAlignmentX(Component.LEFT_ALIGNMENT);
 
         JTextArea descArea = new JTextArea(desc);
         descArea.setWrapStyleWord(true);
         descArea.setLineWrap(true);
         descArea.setEditable(false);
         descArea.setOpaque(false);
-        descArea.setForeground(TEXT_MUTED);
+        descArea.setForeground(new Color(44, 62, 86));
         descArea.setFont(new Font("SansSerif", Font.PLAIN, 12));
-        descArea.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
+        descArea.setAlignmentX(Component.LEFT_ALIGNMENT);
 
-        JButton openBtn = createStyledButton(buttonText + "  →", TEAL_SOFT);
-        openBtn.setForeground(TEAL_PRIMARY);
-        openBtn.setFont(new Font("SansSerif", Font.BOLD, 12));
-        openBtn.setBorder(new EmptyBorder(10, 16, 10, 16));
-        openBtn.addActionListener(e -> onClickAction.run());
+        textColumn.add(Box.createVerticalGlue());
+        textColumn.add(titleLabel);
+        textColumn.add(Box.createVerticalStrut(5));
+        textColumn.add(descArea);
+        textColumn.add(Box.createVerticalGlue());
 
-        MouseAdapter hoverEffect = new MouseAdapter() {
+        JPanel rightActionCol = new JPanel(new BorderLayout());
+        rightActionCol.setOpaque(false);
+
+        PillButton actionBtn = new PillButton(buttonText, style.buttonColor, style.buttonColor.darker(), Color.WHITE);
+        actionBtn.setFont(new Font("SansSerif", Font.BOLD, 11));
+        actionBtn.setBorder(new EmptyBorder(9, 16, 9, 16));
+        actionBtn.addActionListener(e -> onClickAction.run());
+
+        rightActionCol.add(actionBtn, BorderLayout.SOUTH);
+
+        MouseAdapter clickHandler = new MouseAdapter() {
             @Override
             public void mouseEntered(MouseEvent e) {
-                card.setBorderColor(accentColor);
-                card.setFillColor(new Color(250, 253, 255));
+                card.setHovered(true);
             }
             @Override
             public void mouseExited(MouseEvent e) {
-                card.setBorderColor(BORDER_LIGHT);
-                card.setFillColor(Color.WHITE);
+                card.setHovered(false);
             }
             @Override
             public void mouseClicked(MouseEvent e) {
                 onClickAction.run();
             }
         };
-        card.addMouseListener(hoverEffect);
-        descArea.addMouseListener(hoverEffect);
+        card.addMouseListener(clickHandler);
+        descArea.addMouseListener(clickHandler);
 
-        card.add(cardHeader, BorderLayout.NORTH);
-        card.add(descArea, BorderLayout.CENTER);
-        card.add(openBtn, BorderLayout.SOUTH);
+        card.add(badgeWrapper, BorderLayout.WEST);
+        card.add(textColumn, BorderLayout.CENTER);
+        card.add(rightActionCol, BorderLayout.EAST);
 
         parentGrid.add(card);
     }
 
     // =========================================================================
-    // 3. EDUCATIONAL CONTENT READER (Search + Topic Filter + Image + Bold HTML)
+    // 3. UNIFIED CONTENT READER (Articles, Advisories, FAQs, Preparedness Guides)
     // =========================================================================
 
     private void showContentPage(String contentType) {
         setActiveNav(contentType);
-        String pageTitle = switch (contentType) {
-            case "Article"  -> "Educational Articles";
-            case "Advisory" -> "Public Advisories";
-            case "FAQ"      -> "Frequently Asked Questions";
-            default         -> "Preparedness Guides";
-        };
 
-        JPanel page = createPageContainer(pageTitle, "Search by keyword or filter by topic to explore climate preparedness resources.");
-        JPanel body = new JPanel(new BorderLayout(12, 14));
-        body.setOpaque(false);
+        String pageTitle;
+        String pageSubtitle;
+        String headerSymbol;
+        String searchPlaceholder;
+        String listHeaderTitle;
+        String actionPillLabel;
 
-        // Search & Filter Bar
-        RoundedPanel filterCard = new RoundedPanel(14, Color.WHITE, BORDER_LIGHT);
-        filterCard.setLayout(new FlowLayout(FlowLayout.LEFT, 10, 8));
-        filterCard.setBorder(new EmptyBorder(6, 12, 6, 12));
+        switch (contentType) {
+            case "Article" -> {
+                pageTitle = "Educational Articles";
+                pageSubtitle = "Search for keyword or filter by topic to explore climate preparedness resources.";
+                headerSymbol = "📖";
+                searchPlaceholder = "Search articles...";
+                listHeaderTitle = "Articles List";
+                actionPillLabel = "📖  Full Article View";
+            }
+            case "Advisory" -> {
+                pageTitle = "Public Advisories";
+                pageSubtitle = "Stay updated on water conservation alerts and extreme heat safety reminders.";
+                headerSymbol = "⚠";
+                searchPlaceholder = "Search advisories...";
+                listHeaderTitle = "Advisories List";
+                actionPillLabel = "⚠  Official Advisory";
+            }
+            case "FAQ" -> {
+                pageTitle = "Frequently Asked Questions";
+                pageSubtitle = "Quick, verified answers to common El Niño and household readiness questions.";
+                headerSymbol = "?";
+                searchPlaceholder = "Search FAQs...";
+                listHeaderTitle = "Questions List";
+                actionPillLabel = "?  Verified Answer";
+            }
+            default -> {
+                pageTitle = "Preparedness Guides";
+                pageSubtitle = "Practical household checklists, emergency water storage, and cooling tips.";
+                headerSymbol = "📋";
+                searchPlaceholder = "Search guides...";
+                listHeaderTitle = "Guides List";
+                actionPillLabel = "📋  Preparedness Guide";
+            }
+        }
 
-        JTextField searchField = new JTextField(20);
-        searchField.setFont(new Font("SansSerif", Font.PLAIN, 12));
-        searchField.setBorder(BorderFactory.createCompoundBorder(
-            BorderFactory.createLineBorder(BORDER_LIGHT),
-            new EmptyBorder(6, 8, 6, 8)
-        ));
+        JPanel page = new JPanel(new BorderLayout(0, 14));
+        page.setOpaque(false);
+        page.setBorder(new EmptyBorder(18, 26, 18, 26));
+
+        // 1. TOP GRADIENT HEADER BANNER CARD
+        ContentPageBanner banner = new ContentPageBanner(headerSymbol, pageTitle, pageSubtitle);
+
+        // 2. PILL SEARCH & FILTER TOOLBAR
+        JPanel toolbar = new JPanel(new BorderLayout(12, 0));
+        toolbar.setOpaque(false);
+
+        RoundedPanel searchBarBox = new RoundedPanel(22, Color.WHITE, BORDER_LIGHT);
+        searchBarBox.setLayout(new BorderLayout(10, 0));
+        searchBarBox.setBorder(new EmptyBorder(6, 16, 6, 14));
+
+        JLabel searchIcon = new JLabel("🔍");
+        searchIcon.setFont(new Font("SansSerif", Font.PLAIN, 14));
+        searchIcon.setForeground(NAVY_TOP);
+
+        JTextField searchField = new JTextField();
+        searchField.setFont(new Font("SansSerif", Font.PLAIN, 13));
+        searchField.setBorder(null);
+        searchField.setOpaque(false);
+        searchField.setForeground(TEXT_MUTED);
+        searchField.setText(searchPlaceholder);
+
+        searchField.addFocusListener(new FocusAdapter() {
+            @Override
+            public void focusGained(FocusEvent e) {
+                if (searchField.getText().equals(searchPlaceholder)) {
+                    searchField.setText("");
+                    searchField.setForeground(TEXT_MAIN);
+                }
+            }
+            @Override
+            public void focusLost(FocusEvent e) {
+                if (searchField.getText().isBlank()) {
+                    searchField.setForeground(TEXT_MUTED);
+                    searchField.setText(searchPlaceholder);
+                }
+            }
+        });
+
+        searchBarBox.add(searchIcon, BorderLayout.WEST);
+        searchBarBox.add(searchField, BorderLayout.CENTER);
+
+        JPanel rightFilterControls = new JPanel(new FlowLayout(FlowLayout.RIGHT, 10, 0));
+        rightFilterControls.setOpaque(false);
+
+        JLabel topicLabel = new JLabel("Topic:");
+        topicLabel.setFont(new Font("SansSerif", Font.BOLD, 13));
+        topicLabel.setForeground(NAVY_BOTTOM);
+
+        RoundedPanel comboWrapper = new RoundedPanel(20, Color.WHITE, BORDER_LIGHT);
+        comboWrapper.setLayout(new BorderLayout());
+        comboWrapper.setBorder(new EmptyBorder(4, 12, 4, 8));
 
         JComboBox<String> categoryBox = new JComboBox<>(new String[]{
             "All", "Basics", "Effects", "Water Conservation", "Heat Safety", "Preparedness", "Other"
         });
         categoryBox.setFont(new Font("SansSerif", Font.PLAIN, 12));
         categoryBox.setBackground(Color.WHITE);
+        categoryBox.setForeground(TEXT_MAIN);
+        categoryBox.setBorder(null);
+        categoryBox.setPreferredSize(new Dimension(150, 28));
+        comboWrapper.add(categoryBox, BorderLayout.CENTER);
 
-        JButton searchBtn = createStyledButton("Search", TEAL_PRIMARY);
-        JButton resetBtn = createStyledButton("Reset", TEXT_MUTED);
+        PillButton searchBtn = new PillButton("🔍  Search", NAVY_TOP, NAVY_BOTTOM, Color.WHITE);
+        searchBtn.setFont(new Font("SansSerif", Font.BOLD, 12));
+        searchBtn.setBorder(new EmptyBorder(9, 18, 9, 18));
 
-        filterCard.add(createFieldLabel("Keyword"));
-        filterCard.add(searchField);
-        filterCard.add(createFieldLabel("Topic"));
-        filterCard.add(categoryBox);
-        filterCard.add(searchBtn);
-        filterCard.add(resetBtn);
+        PillButton resetBtn = new PillButton("↻  Reset", new Color(216, 224, 234), new Color(196, 208, 222), NAVY_BOTTOM);
+        resetBtn.setFont(new Font("SansSerif", Font.BOLD, 12));
+        resetBtn.setBorder(new EmptyBorder(9, 16, 9, 16));
 
-        // Left List of Records
+        rightFilterControls.add(topicLabel);
+        rightFilterControls.add(comboWrapper);
+        rightFilterControls.add(searchBtn);
+        rightFilterControls.add(resetBtn);
+
+        toolbar.add(searchBarBox, BorderLayout.CENTER);
+        toolbar.add(rightFilterControls, BorderLayout.EAST);
+
+        JPanel topStack = new JPanel(new BorderLayout(0, 12));
+        topStack.setOpaque(false);
+        topStack.add(banner, BorderLayout.NORTH);
+        topStack.add(toolbar, BorderLayout.SOUTH);
+
+        // 3. LEFT MASTER LIST CARD + RIGHT READER CARD
+        JPanel splitContainer = new JPanel(new BorderLayout(16, 0));
+        splitContainer.setOpaque(false);
+
+        // Left Card ("Categories / Records")
+        RoundedPanel leftCard = new RoundedPanel(22, Color.WHITE, BORDER_LIGHT);
+        leftCard.setPreferredSize(new Dimension(285, 0));
+        leftCard.setLayout(new BorderLayout(0, 8));
+        leftCard.setBorder(new EmptyBorder(14, 12, 12, 12));
+
+        JPanel leftCardHeader = new JPanel(new FlowLayout(FlowLayout.LEFT, 8, 2));
+        leftCardHeader.setOpaque(false);
+        leftCardHeader.setBorder(BorderFactory.createCompoundBorder(
+            BorderFactory.createMatteBorder(0, 0, 1, 0, new Color(232, 238, 246)),
+            new EmptyBorder(0, 4, 8, 4)
+        ));
+
+        JLabel stackIcon = new JLabel("❖");
+        stackIcon.setFont(new Font("SansSerif", Font.BOLD, 16));
+        stackIcon.setForeground(NAVY_TOP);
+
+        JLabel leftHeading = new JLabel(listHeaderTitle);
+        leftHeading.setFont(new Font("SansSerif", Font.BOLD, 15));
+        leftHeading.setForeground(NAVY_BOTTOM);
+
+        leftCardHeader.add(stackIcon);
+        leftCardHeader.add(leftHeading);
+
         DefaultListModel<Content> listModel = new DefaultListModel<>();
         JList<Content> itemList = new JList<>(listModel);
         itemList.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
-        itemList.setFixedCellHeight(74);
+        itemList.setOpaque(false);
         itemList.setBackground(Color.WHITE);
 
-        itemList.setCellRenderer((list, value, index, isSelected, cellHasFocus) -> {
-            JLabel row = new JLabel("<html><div style='width:195px; padding:2px;'>"
-                    + "<b style='font-size:11px; color:#0F293A;'>" + escapeHtml(value.getTitle()) + "</b><br>"
-                    + "<span style='font-size:9px; color:#0D9488;'>● " + escapeHtml(value.getCategory()) + "</span>"
-                    + "</div></html>");
-            row.setOpaque(true);
-            row.setVerticalAlignment(SwingConstants.CENTER);
-            row.setBorder(BorderFactory.createCompoundBorder(
-                BorderFactory.createMatteBorder(0, isSelected ? 4 : 0, 1, 0, isSelected ? SOLAR_AMBER : BORDER_LIGHT),
-                new EmptyBorder(6, 10, 6, 10)
-            ));
-            row.setBackground(isSelected ? new Color(240, 253, 250) : Color.WHITE);
-            return row;
-        });
+        // Custom Rounded Card Cell Renderer matching screenshot
+        itemList.setCellRenderer((list, value, index, isSelected, cellHasFocus) ->
+            new ContentListItemCard(value, index + 1, isSelected)
+        );
 
-        // Right Reader Panel
-        JPanel readerCard = new JPanel(new BorderLayout(0, 12));
-        readerCard.setBackground(Color.WHITE);
-        readerCard.setBorder(BorderFactory.createCompoundBorder(
-            BorderFactory.createLineBorder(BORDER_LIGHT),
-            new EmptyBorder(20, 22, 20, 22)
-        ));
+        JScrollPane leftScroll = new JScrollPane(itemList);
+        leftScroll.setBorder(null);
+        leftScroll.setOpaque(false);
+        leftScroll.getViewport().setOpaque(false);
+        leftScroll.getVerticalScrollBar().setUnitIncrement(14);
+        leftScroll.setHorizontalScrollBarPolicy(ScrollPaneConstants.HORIZONTAL_SCROLLBAR_NEVER);
+
+        // Scenic mini-illustration footer at bottom of left card
+        JPanel leftFooterArt = new CommunityIllustrationFooter();
+        leftFooterArt.setPreferredSize(new Dimension(0, 92));
+
+        leftCard.add(leftCardHeader, BorderLayout.NORTH);
+        leftCard.add(leftScroll, BorderLayout.CENTER);
+        leftCard.add(leftFooterArt, BorderLayout.SOUTH);
+
+        // Right Detail Reader Card
+        RoundedPanel readerCard = new RoundedPanel(22, Color.WHITE, BORDER_LIGHT);
+        readerCard.setLayout(new BorderLayout(0, 12));
+        readerCard.setBorder(new EmptyBorder(20, 24, 18, 24));
+
+        // Reader Header with vertical gold bar + title + metadata icons
+        JPanel readerTopHeader = new JPanel(new BorderLayout(12, 0));
+        readerTopHeader.setOpaque(false);
+
+        JPanel goldVertBar = new JPanel() {
+            @Override
+            protected void paintComponent(Graphics g) {
+                Graphics2D g2 = (Graphics2D) g.create();
+                g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+                g2.setColor(SOLAR_GOLD);
+                g2.fillRoundRect(0, 2, 4, getHeight() - 4, 4, 4);
+                g2.dispose();
+            }
+        };
+        goldVertBar.setOpaque(false);
+        goldVertBar.setPreferredSize(new Dimension(5, 48));
+
+        JPanel titleMetaStack = new JPanel();
+        titleMetaStack.setOpaque(false);
+        titleMetaStack.setLayout(new BoxLayout(titleMetaStack, BoxLayout.Y_AXIS));
 
         JLabel readerTitle = new JLabel("Select an item on the left to read");
-        readerTitle.setFont(new Font("SansSerif", Font.BOLD, 18));
-        readerTitle.setForeground(OCEAN_DARK);
+        readerTitle.setFont(new Font("SansSerif", Font.BOLD, 19));
+        readerTitle.setForeground(NAVY_BOTTOM);
 
-        JLabel readerMeta = new JLabel("Category  •  Published Date  •  Source");
-        readerMeta.setFont(new Font("SansSerif", Font.BOLD, 11));
-        readerMeta.setForeground(TEAL_PRIMARY);
+        JLabel readerMeta = new JLabel("📅  Date   |   🏷  Category   |   🛡  Source");
+        readerMeta.setFont(new Font("SansSerif", Font.PLAIN, 12));
+        readerMeta.setForeground(TEXT_MUTED);
 
-        JPanel readerHeader = new JPanel();
-        readerHeader.setOpaque(false);
-        readerHeader.setLayout(new BoxLayout(readerHeader, BoxLayout.Y_AXIS));
-        readerHeader.add(readerTitle);
-        readerHeader.add(Box.createVerticalStrut(4));
-        readerHeader.add(readerMeta);
-        readerHeader.add(Box.createVerticalStrut(10));
-        readerHeader.add(new JSeparator());
+        titleMetaStack.add(readerTitle);
+        titleMetaStack.add(Box.createVerticalStrut(5));
+        titleMetaStack.add(readerMeta);
 
-        // Scrollable container locked to viewport width with clean white background
+        readerTopHeader.add(goldVertBar, BorderLayout.WEST);
+        readerTopHeader.add(titleMetaStack, BorderLayout.CENTER);
+
+        // Scrollable Body Area with Rounded Image Preview + Formatted HTML Text
         ScrollablePanel scrollableContent = new ScrollablePanel();
         scrollableContent.setLayout(new BoxLayout(scrollableContent, BoxLayout.Y_AXIS));
         scrollableContent.setBackground(Color.WHITE);
 
-        JLabel readerImageLabel = new JLabel();
-        readerImageLabel.setAlignmentX(Component.LEFT_ALIGNMENT);
-        readerImageLabel.setBorder(new EmptyBorder(4, 0, 14, 0));
-        readerImageLabel.setVisible(false);
+        RoundedImagePreview readerImagePreview = new RoundedImagePreview();
+        readerImagePreview.setAlignmentX(Component.LEFT_ALIGNMENT);
+        readerImagePreview.setVisible(false);
 
         JEditorPane readingPane = new JEditorPane("text/html", "");
         readingPane.putClientProperty(JEditorPane.HONOR_DISPLAY_PROPERTIES, Boolean.TRUE);
@@ -575,9 +955,9 @@ public class SinagApp extends JFrame {
         readingPane.setEditable(false);
         readingPane.setOpaque(true);
         readingPane.setBackground(Color.WHITE);
-        readingPane.setText(formatBodyAsHtml("Choose any article, advisory, FAQ, or preparedness guide from the list to view its full details here."));
+        readingPane.setText(formatBodyAsHtml("Choose any item from the list on the left to view its full details here."));
 
-        scrollableContent.add(readerImageLabel);
+        scrollableContent.add(readerImagePreview);
         scrollableContent.add(readingPane);
 
         JScrollPane contentScroll = new JScrollPane(scrollableContent);
@@ -587,43 +967,50 @@ public class SinagApp extends JFrame {
         contentScroll.getVerticalScrollBar().setUnitIncrement(16);
         contentScroll.setHorizontalScrollBarPolicy(ScrollPaneConstants.HORIZONTAL_SCROLLBAR_NEVER);
 
-        readerCard.add(readerHeader, BorderLayout.NORTH);
+        // Bottom-Right Pill Badge / Scroll-to-Top Action matching "Read Full Article →"
+        JPanel readerFooter = new JPanel(new FlowLayout(FlowLayout.RIGHT, 0, 0));
+        readerFooter.setOpaque(false);
+
+        PillButton statusPill = new PillButton(actionPillLabel, SOLAR_GOLD, SOLAR_GOLD_DK, NAVY_BOTTOM);
+        statusPill.setFont(new Font("SansSerif", Font.BOLD, 12));
+        statusPill.setBorder(new EmptyBorder(9, 18, 9, 18));
+        statusPill.addActionListener(e -> SwingUtilities.invokeLater(() -> contentScroll.getVerticalScrollBar().setValue(0)));
+        readerFooter.add(statusPill);
+
+        readerCard.add(readerTopHeader, BorderLayout.NORTH);
         readerCard.add(contentScroll, BorderLayout.CENTER);
+        readerCard.add(readerFooter, BorderLayout.SOUTH);
 
         itemList.addListSelectionListener(e -> {
             if (!e.getValueIsAdjusting() && itemList.getSelectedValue() != null) {
                 Content selected = itemList.getSelectedValue();
                 readerTitle.setText(selected.getTitle());
-                readerMeta.setText(selected.getCategory().toUpperCase()
-                        + "   |   Published: " + selected.getPublishedDate()
-                        + "   |   Source: " + selected.getSource());
+                readerMeta.setText("📅  " + selected.getPublishedDate()
+                        + "    |    🏷  " + selected.getCategory()
+                        + "    |    🛡  Source: " + selected.getSource());
                 readingPane.setText(formatBodyAsHtml(selected.getBody()));
 
-                // Only display image label when a valid image exists; otherwise collapse it completely
                 String imgPath = selected.getImagePath();
-                boolean hasValidImage = false;
+                BufferedImage loadedImg = null;
                 if (imgPath != null && !imgPath.isBlank()) {
                     try {
                         if (imgPath.startsWith("data:image")) {
                             String base64Data = imgPath.substring(imgPath.indexOf(",") + 1);
                             byte[] imgBytes = Base64.getDecoder().decode(base64Data);
-                            readerImageLabel.setIcon(new ImageIcon(imgBytes));
-                            hasValidImage = true;
+                            loadedImg = ImageIO.read(new java.io.ByteArrayInputStream(imgBytes));
                         } else if (new File(imgPath).exists()) {
-                            ImageIcon rawIcon = new ImageIcon(imgPath);
-                            Image scaled = rawIcon.getImage().getScaledInstance(480, 230, Image.SCALE_SMOOTH);
-                            readerImageLabel.setIcon(new ImageIcon(scaled));
-                            hasValidImage = true;
+                            loadedImg = ImageIO.read(new File(imgPath));
                         }
                     } catch (Exception ignored) {
                     }
                 }
 
-                if (hasValidImage) {
-                    readerImageLabel.setVisible(true);
+                if (loadedImg != null) {
+                    readerImagePreview.setImage(loadedImg);
+                    readerImagePreview.setVisible(true);
                 } else {
-                    readerImageLabel.setIcon(null);
-                    readerImageLabel.setVisible(false);
+                    readerImagePreview.setImage(null);
+                    readerImagePreview.setVisible(false);
                 }
 
                 scrollableContent.revalidate();
@@ -634,10 +1021,14 @@ public class SinagApp extends JFrame {
 
         Runnable reloadItems = () -> {
             listModel.clear();
-            readerImageLabel.setIcon(null);
-            readerImageLabel.setVisible(false);
+            readerImagePreview.setImage(null);
+            readerImagePreview.setVisible(false);
+            String queryText = searchField.getText().trim();
+            if (queryText.equals(searchPlaceholder)) {
+                queryText = "";
+            }
             try {
-                List<Content> records = db.getContent(contentType, searchField.getText().trim(), (String) categoryBox.getSelectedItem());
+                List<Content> records = db.getContent(contentType, queryText, (String) categoryBox.getSelectedItem());
                 for (Content c : records) {
                     listModel.addElement(c);
                 }
@@ -646,7 +1037,7 @@ public class SinagApp extends JFrame {
                 } else {
                     readerTitle.setText("No matching records found");
                     readerMeta.setText("Try clearing your search keyword or selecting 'All' topics");
-                    readingPane.setText(formatBodyAsHtml(""));
+                    readingPane.setText(formatBodyAsHtml("No records matched your current filter criteria."));
                 }
             } catch (SQLException ex) {
                 showError(ex);
@@ -657,25 +1048,17 @@ public class SinagApp extends JFrame {
         searchField.addActionListener(e -> reloadItems.run());
         categoryBox.addActionListener(e -> reloadItems.run());
         resetBtn.addActionListener(e -> {
-            searchField.setText("");
+            searchField.setForeground(TEXT_MUTED);
+            searchField.setText(searchPlaceholder);
             categoryBox.setSelectedIndex(0);
             reloadItems.run();
         });
 
-        JScrollPane leftScroll = new JScrollPane(itemList);
-        leftScroll.setBorder(BorderFactory.createLineBorder(BORDER_LIGHT));
-        leftScroll.setHorizontalScrollBarPolicy(ScrollPaneConstants.HORIZONTAL_SCROLLBAR_NEVER);
-        leftScroll.setMinimumSize(new Dimension(265, 0));
+        splitContainer.add(leftCard, BorderLayout.WEST);
+        splitContainer.add(readerCard, BorderLayout.CENTER);
 
-        JSplitPane splitPane = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT, leftScroll, readerCard);
-        splitPane.setDividerLocation(275);
-        splitPane.setResizeWeight(0.30);
-        splitPane.setDividerSize(8);
-        splitPane.setBorder(null);
-
-        body.add(filterCard, BorderLayout.NORTH);
-        body.add(splitPane, BorderLayout.CENTER);
-        page.add(body, BorderLayout.CENTER);
+        page.add(topStack, BorderLayout.NORTH);
+        page.add(splitContainer, BorderLayout.CENTER);
 
         reloadItems.run();
         switchMainPage(page);
@@ -691,7 +1074,6 @@ public class SinagApp extends JFrame {
         JPanel wrapper = new JPanel(new BorderLayout(12, 14));
         wrapper.setOpaque(false);
 
-        // Top Game Bar (Topic Selector + Start + 50/50 Lifeline + Streak Badge)
         RoundedPanel topControls = new RoundedPanel(14, Color.WHITE, BORDER_LIGHT);
         topControls.setLayout(new BorderLayout(10, 0));
         topControls.setBorder(new EmptyBorder(8, 14, 8, 14));
@@ -706,7 +1088,7 @@ public class SinagApp extends JFrame {
         categoryBox.setBackground(Color.WHITE);
 
         JButton startBtn = createStyledButton("▶  Start Challenge", TEAL_PRIMARY);
-        JButton lifelineBtn = createStyledButton("⚡ 50/50 Lifeline (1)", SOLAR_AMBER);
+        JButton lifelineBtn = createStyledButton("⚡ 50/50 Lifeline (1)", SOLAR_GOLD_DK);
         lifelineBtn.setEnabled(false);
 
         leftControls.add(createFieldLabel("Topic"));
@@ -716,17 +1098,15 @@ public class SinagApp extends JFrame {
 
         JLabel streakLabel = new JLabel("🔥 STREAK: 0x   |   SCORE: 0");
         streakLabel.setFont(new Font("SansSerif", Font.BOLD, 12));
-        streakLabel.setForeground(SOLAR_TEXT);
+        streakLabel.setForeground(new Color(146, 64, 14));
 
         topControls.add(leftControls, BorderLayout.WEST);
         topControls.add(streakLabel, BorderLayout.EAST);
 
-        // Main Quiz Card
         RoundedPanel quizCard = new RoundedPanel(18, Color.WHITE, BORDER_LIGHT);
         quizCard.setLayout(new BorderLayout(12, 16));
         quizCard.setBorder(new EmptyBorder(24, 28, 24, 28));
 
-        // Progress + Live Countdown Header
         JPanel progressHeader = new JPanel(new BorderLayout(0, 8));
         progressHeader.setOpaque(false);
 
@@ -746,7 +1126,7 @@ public class SinagApp extends JFrame {
 
         JProgressBar progressBar = new JProgressBar(0, 100);
         progressBar.setValue(0);
-        progressBar.setForeground(SOLAR_AMBER);
+        progressBar.setForeground(SOLAR_GOLD);
         progressBar.setBackground(new Color(226, 232, 240));
         progressBar.setBorderPainted(false);
         progressBar.setPreferredSize(new Dimension(0, 8));
@@ -759,7 +1139,7 @@ public class SinagApp extends JFrame {
         questionArea.setWrapStyleWord(true);
         questionArea.setEditable(false);
         questionArea.setOpaque(false);
-        questionArea.setForeground(OCEAN_DARK);
+        questionArea.setForeground(NAVY_BOTTOM);
         questionArea.setFont(new Font("SansSerif", Font.BOLD, 18));
 
         JPanel choicesPanel = new JPanel(new GridLayout(4, 1, 10, 10));
@@ -830,7 +1210,7 @@ public class SinagApp extends JFrame {
         feedbackArea.setFont(new Font("SansSerif", Font.BOLD, 12));
         feedbackArea.setBorder(new EmptyBorder(10, 14, 10, 14));
 
-        JButton submitOrNextBtn = createStyledButton("Lock In Answer", OCEAN_DARK);
+        JButton submitOrNextBtn = createStyledButton("Lock In Answer", NAVY_TOP);
         submitOrNextBtn.setEnabled(false);
 
         JPanel questionBody = new JPanel(new BorderLayout(10, 14));
@@ -847,7 +1227,6 @@ public class SinagApp extends JFrame {
         wrapper.add(quizCard, BorderLayout.CENTER);
         page.add(wrapper, BorderLayout.CENTER);
 
-        // Helper to evaluate and color-code options on submit or timeout
         Runnable evaluateAnswer = () -> {
             if (hasAnswered || quizQuestions.isEmpty()) return;
             if (questionTimer != null) questionTimer.stop();
@@ -863,7 +1242,6 @@ public class SinagApp extends JFrame {
             boolean isTimeout = (userAnswer == null);
             boolean isCorrect = !isTimeout && currentQ.checkAnswer(userAnswer);
 
-            // Highlight correct & wrong cards visually
             int correctIdx = currentQ.getCorrect().charAt(0) - 'A';
             for (int i = 0; i < 4; i++) {
                 optionButtons[i].setEnabled(false);
@@ -907,7 +1285,6 @@ public class SinagApp extends JFrame {
             submitOrNextBtn.setText(currentQuestionIndex == quizQuestions.size() - 1 ? "View Final Readiness Rank  ★" : "Next Question  →");
         };
 
-        // 20-Second Per-Question Countdown Timer
         if (questionTimer != null) questionTimer.stop();
         questionTimer = new Timer(1000, e -> {
             if (hasAnswered) return;
@@ -916,7 +1293,7 @@ public class SinagApp extends JFrame {
             if (secondsLeft <= 5) {
                 timerLabel.setForeground(new Color(220, 38, 38));
             } else if (secondsLeft <= 10) {
-                timerLabel.setForeground(SOLAR_TEXT);
+                timerLabel.setForeground(new Color(146, 64, 14));
             } else {
                 timerLabel.setForeground(TEAL_PRIMARY);
             }
@@ -925,7 +1302,6 @@ public class SinagApp extends JFrame {
             }
         });
 
-        // 50/50 Lifeline: Disables 2 incorrect options once per game
         lifelineBtn.addActionListener(e -> {
             if (fiftyFiftyUsed || hasAnswered || quizQuestions.isEmpty()) return;
             QuizQuestion currentQ = quizQuestions.get(currentQuestionIndex);
@@ -1002,8 +1378,8 @@ public class SinagApp extends JFrame {
                     for (JRadioButton btn : optionButtons) {
                         btn.setVisible(false);
                     }
-                    feedbackArea.setBackground(SOLAR_SOFT);
-                    feedbackArea.setForeground(SOLAR_TEXT);
+                    feedbackArea.setBackground(new Color(254, 243, 199));
+                    feedbackArea.setForeground(new Color(146, 64, 14));
                     feedbackArea.setText("☀ Tip: Review the Educational Articles and Preparedness Guides to boost your rank, then click Start Challenge to play again!");
                     submitOrNextBtn.setEnabled(false);
                     lifelineBtn.setEnabled(false);
@@ -1045,7 +1421,7 @@ public class SinagApp extends JFrame {
         feedbackArea.setText("");
         hasAnswered = false;
         lifelineBtn.setEnabled(!fiftyFiftyUsed);
-        actionBtn.setBackground(OCEAN_DARK);
+        actionBtn.setBackground(NAVY_TOP);
         actionBtn.setText("Lock In Answer");
         actionBtn.setEnabled(true);
 
@@ -1069,7 +1445,7 @@ public class SinagApp extends JFrame {
 
         JLabel missionHeader = new JLabel("☀  System Objectives & Scope");
         missionHeader.setFont(new Font("SansSerif", Font.BOLD, 17));
-        missionHeader.setForeground(OCEAN_DARK);
+        missionHeader.setForeground(NAVY_BOTTOM);
 
         JTextArea aboutText = new JTextArea(
             "SINAG is an educational desktop system designed to promote climate awareness, water conservation, "
@@ -1147,7 +1523,7 @@ public class SinagApp extends JFrame {
 
         JPanel topBar = new JPanel(new FlowLayout(FlowLayout.RIGHT, 0, 0));
         topBar.setOpaque(false);
-        JButton logoutBtn = createStyledButton("←  Exit Admin Portal", OCEAN_MID);
+        JButton logoutBtn = createStyledButton("←  Exit Admin Portal", NAVY_TOP);
         logoutBtn.addActionListener(e -> showHome());
         topBar.add(logoutBtn);
 
@@ -1202,7 +1578,7 @@ public class SinagApp extends JFrame {
         actions.setOpaque(false);
 
         JButton addBtn = createStyledButton("+ Add Content", TEAL_PRIMARY);
-        JButton editBtn = createStyledButton("✎ Edit Selected", OCEAN_MID);
+        JButton editBtn = createStyledButton("✎ Edit Selected", NAVY_TOP);
         JButton deleteBtn = createStyledButton("✕ Delete Selected", new Color(220, 38, 38));
 
         addBtn.addActionListener(e -> {
@@ -1277,7 +1653,6 @@ public class SinagApp extends JFrame {
             categoryBox.setSelectedItem(existing.getCategory());
         }
 
-        // Native Windows File Explorer picker + Base64 Cloud Encoder
         JPanel imagePickerRow = new JPanel(new BorderLayout(6, 0));
         imagePickerRow.setOpaque(false);
         String initialStatus = chosenImagePath[0].isBlank()
@@ -1287,7 +1662,7 @@ public class SinagApp extends JFrame {
         fileStatusLabel.setFont(new Font("SansSerif", Font.ITALIC, 11));
         fileStatusLabel.setForeground(TEXT_MUTED);
 
-        JButton uploadBtn = createStyledButton("Browse...", OCEAN_MID);
+        JButton uploadBtn = createStyledButton("Browse...", NAVY_TOP);
         uploadBtn.addActionListener(e -> {
             FileDialog fileDialog = new FileDialog(dialog, "Select Image", FileDialog.LOAD);
             fileDialog.setFile("*.jpg;*.jpeg;*.png;*.gif");
@@ -1329,7 +1704,6 @@ public class SinagApp extends JFrame {
         topFields.add(new JLabel("Date (YYYY-MM-DD):")); topFields.add(dateField);
         topFields.add(new JLabel("Image (Optional):")); topFields.add(imagePickerRow);
 
-        // Body Editor with Bold (B) formatting button
         JPanel bodyWrapper = new JPanel(new BorderLayout(0, 6));
         bodyWrapper.setOpaque(false);
 
@@ -1342,7 +1716,7 @@ public class SinagApp extends JFrame {
         boldBtn.setToolTipText("Highlight text and click B to bold it (**text**)");
         boldBtn.setFocusPainted(false);
         boldBtn.setBackground(SIDEBAR_BG);
-        boldBtn.setForeground(OCEAN_DARK);
+        boldBtn.setForeground(NAVY_BOTTOM);
         boldBtn.setBorder(BorderFactory.createCompoundBorder(
             BorderFactory.createLineBorder(BORDER_LIGHT),
             new EmptyBorder(3, 10, 3, 10)
@@ -1451,7 +1825,7 @@ public class SinagApp extends JFrame {
         actions.setOpaque(false);
 
         JButton addBtn = createStyledButton("+ Add Question", TEAL_PRIMARY);
-        JButton editBtn = createStyledButton("✎ Edit Selected", OCEAN_MID);
+        JButton editBtn = createStyledButton("✎ Edit Selected", NAVY_TOP);
         JButton deleteBtn = createStyledButton("✕ Delete Selected", new Color(220, 38, 38));
 
         addBtn.addActionListener(e -> {
@@ -1579,7 +1953,7 @@ public class SinagApp extends JFrame {
     }
 
     // =========================================================================
-    // 6. UI HELPERS & CUSTOM GRAPHICS COMPONENTS
+    // 6. CUSTOM GRAPHICS COMPONENTS & UI HELPERS
     // =========================================================================
 
     private JTable styleModernTable(JTable table) {
@@ -1587,11 +1961,11 @@ public class SinagApp extends JFrame {
         table.setFont(new Font("SansSerif", Font.PLAIN, 12));
         table.setGridColor(BORDER_LIGHT);
         table.setSelectionBackground(new Color(204, 244, 237));
-        table.setSelectionForeground(OCEAN_DARK);
+        table.setSelectionForeground(NAVY_BOTTOM);
         table.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
         table.getTableHeader().setFont(new Font("SansSerif", Font.BOLD, 12));
         table.getTableHeader().setBackground(SIDEBAR_BG);
-        table.getTableHeader().setForeground(OCEAN_DARK);
+        table.getTableHeader().setForeground(NAVY_BOTTOM);
 
         table.setDefaultRenderer(Object.class, new DefaultTableCellRenderer() {
             @Override
@@ -1609,16 +1983,16 @@ public class SinagApp extends JFrame {
 
     private JPanel createPageContainer(String title, String subtitle) {
         JPanel page = new JPanel(new BorderLayout(12, 16));
-        page.setBackground(BG_CANVAS);
-        page.setBorder(new EmptyBorder(24, 28, 22, 28));
+        page.setOpaque(false);
+        page.setBorder(new EmptyBorder(22, 28, 20, 28));
 
         JPanel header = new JPanel();
         header.setOpaque(false);
         header.setLayout(new BoxLayout(header, BoxLayout.Y_AXIS));
 
         JLabel titleLabel = new JLabel(title);
-        titleLabel.setFont(new Font("SansSerif", Font.BOLD, 23));
-        titleLabel.setForeground(OCEAN_DARK);
+        titleLabel.setFont(new Font("SansSerif", Font.BOLD, 22));
+        titleLabel.setForeground(NAVY_BOTTOM);
 
         JLabel subLabel = new JLabel(subtitle);
         subLabel.setFont(new Font("SansSerif", Font.PLAIN, 12));
@@ -1635,7 +2009,7 @@ public class SinagApp extends JFrame {
     private JLabel createFieldLabel(String text) {
         JLabel label = new JLabel(text + ":");
         label.setFont(new Font("SansSerif", Font.BOLD, 11));
-        label.setForeground(OCEAN_DARK);
+        label.setForeground(NAVY_BOTTOM);
         return label;
     }
 
@@ -1661,7 +2035,7 @@ public class SinagApp extends JFrame {
         String safe = escapeHtml(rawBody == null ? "" : rawBody);
         safe = safe.replaceAll("\\*\\*(.+?)\\*\\*", "<b>$1</b>");
         safe = safe.replace("\n", "<br>");
-        return "<html><body style='margin:0; padding:0; width:100%; text-align:justify;'>" + safe + "</body></html>";
+        return "<html><body style='margin:0; padding:0; width:100%; line-height:1.45; text-align:justify;'>" + safe + "</body></html>";
     }
 
     private void switchMainPage(JPanel newPage) {
@@ -1677,6 +2051,501 @@ public class SinagApp extends JFrame {
     private void showError(Exception e) {
         JOptionPane.showMessageDialog(this, e.getMessage(), "SINAG Error", JOptionPane.ERROR_MESSAGE);
         e.printStackTrace();
+    }
+
+    // --- CUSTOM PAINTED UI CLASSES ---
+
+    private static class ContentPageBanner extends JPanel {
+        ContentPageBanner(String symbol, String title, String subtitle) {
+            setOpaque(false);
+            setLayout(new BorderLayout(16, 0));
+            setBorder(new EmptyBorder(14, 20, 14, 24));
+
+            JLabel iconTile = new JLabel(symbol, SwingConstants.CENTER) {
+                @Override
+                protected void paintComponent(Graphics g) {
+                    Graphics2D g2 = (Graphics2D) g.create();
+                    g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+                    g2.setPaint(new GradientPaint(0, 0, new Color(253, 224, 71), getWidth(), getHeight(), SOLAR_GOLD_DK));
+                    g2.fillRoundRect(0, 0, getWidth(), getHeight(), 16, 16);
+                    g2.dispose();
+                    super.paintComponent(g);
+                }
+            };
+            iconTile.setPreferredSize(new Dimension(54, 54));
+            iconTile.setFont(new Font("SansSerif", Font.BOLD, 24));
+            iconTile.setForeground(NAVY_TOP);
+
+            JPanel textStack = new JPanel();
+            textStack.setOpaque(false);
+            textStack.setLayout(new BoxLayout(textStack, BoxLayout.Y_AXIS));
+
+            JLabel titleLbl = new JLabel(title);
+            titleLbl.setFont(new Font("SansSerif", Font.BOLD, 24));
+            titleLbl.setForeground(NAVY_BOTTOM);
+
+            JLabel subLbl = new JLabel(subtitle);
+            subLbl.setFont(new Font("SansSerif", Font.PLAIN, 12));
+            subLbl.setForeground(new Color(62, 82, 112));
+
+            textStack.add(titleLbl);
+            textStack.add(Box.createVerticalStrut(3));
+            textStack.add(subLbl);
+
+            // Translucent Shield Badge on Right
+            JLabel shieldMark = new JLabel("🛡", SwingConstants.CENTER);
+            shieldMark.setFont(new Font("SansSerif", Font.PLAIN, 44));
+            shieldMark.setForeground(new Color(255, 255, 255, 190));
+
+            add(iconTile, BorderLayout.WEST);
+            add(textStack, BorderLayout.CENTER);
+            add(shieldMark, BorderLayout.EAST);
+        }
+
+        @Override
+        protected void paintComponent(Graphics g) {
+            Graphics2D g2 = (Graphics2D) g.create();
+            g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+            int w = getWidth();
+            int h = getHeight();
+
+            g2.setPaint(new GradientPaint(0, 0, new Color(238, 246, 255), w, 0, new Color(172, 212, 250)));
+            g2.fillRoundRect(0, 0, w - 1, h - 1, 20, 20);
+
+            // Diagonal light swoosh
+            g2.setColor(new Color(255, 255, 255, 115));
+            Path2D swoosh = new Path2D.Double();
+            swoosh.moveTo(w * 0.45, h);
+            swoosh.curveTo(w * 0.65, h * 0.35, w * 0.85, h * 0.25, w, 0);
+            swoosh.lineTo(w, h);
+            swoosh.closePath();
+            g2.fill(swoosh);
+
+            g2.setColor(new Color(196, 218, 242));
+            g2.drawRoundRect(0, 0, w - 1, h - 1, 20, 20);
+            g2.dispose();
+            super.paintComponent(g);
+        }
+    }
+
+    private static class ContentListItemCard extends JPanel {
+        private final boolean selected;
+
+        ContentListItemCard(Content item, int number, boolean selected) {
+            this.selected = selected;
+            setOpaque(false);
+            setLayout(new BorderLayout(10, 0));
+            setBorder(new EmptyBorder(8, 10, 8, 10));
+
+            // Left Category/Type Symbol
+            JLabel leadIcon = new JLabel("✦", SwingConstants.CENTER);
+            leadIcon.setFont(new Font("SansSerif", Font.BOLD, 14));
+            leadIcon.setForeground(selected ? NAVY_BOTTOM : NAVY_TOP);
+            leadIcon.setPreferredSize(new Dimension(24, 24));
+
+            // Middle Title + Category Subtitle
+            JLabel textLbl = new JLabel("<html><div style='width:162px;'>"
+                    + "<b style='font-size:11px; color:#041834;'>" + escape(item.getTitle()) + "</b><br>"
+                    + "<span style='font-size:9px; color:#5C6C84;'>" + escape(item.getCategory()) + "</span>"
+                    + "</div></html>");
+
+            // Right Circular Number Pill Badge
+            JPanel badgeWrap = new JPanel(new GridBagLayout());
+            badgeWrap.setOpaque(false);
+
+            JLabel countBadge = new JLabel(String.valueOf(number), SwingConstants.CENTER) {
+                @Override
+                protected void paintComponent(Graphics g) {
+                    Graphics2D g2 = (Graphics2D) g.create();
+                    g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+                    g2.setColor(selected ? SOLAR_GOLD : new Color(224, 236, 250));
+                    g2.fillOval(0, 0, getWidth(), getHeight());
+                    g2.dispose();
+                    super.paintComponent(g);
+                }
+            };
+            countBadge.setPreferredSize(new Dimension(24, 24));
+            countBadge.setFont(new Font("SansSerif", Font.BOLD, 10));
+            countBadge.setForeground(NAVY_BOTTOM);
+            badgeWrap.add(countBadge);
+
+            add(leadIcon, BorderLayout.WEST);
+            add(textLbl, BorderLayout.CENTER);
+            add(badgeWrap, BorderLayout.EAST);
+        }
+
+        private static String escape(String s) {
+            return s == null ? "" : s.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;");
+        }
+
+        @Override
+        protected void paintComponent(Graphics g) {
+            Graphics2D g2 = (Graphics2D) g.create();
+            g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+
+            int padX = 2;
+            int padY = 3;
+            int w = getWidth() - padX * 2;
+            int h = getHeight() - padY * 2;
+
+            if (selected) {
+                g2.setPaint(new GradientPaint(padX, padY, new Color(254, 238, 178), padX + w, padY + h, new Color(249, 212, 92)));
+                g2.fillRoundRect(padX, padY, w, h, 14, 14);
+                g2.setColor(SOLAR_GOLD_DK);
+            } else {
+                g2.setColor(new Color(246, 250, 255));
+                g2.fillRoundRect(padX, padY, w, h, 14, 14);
+                g2.setColor(new Color(222, 232, 244));
+            }
+            g2.drawRoundRect(padX, padY, w - 1, h - 1, 14, 14);
+            g2.dispose();
+            super.paintComponent(g);
+        }
+    }
+
+    private static class CommunityIllustrationFooter extends JPanel {
+        CommunityIllustrationFooter() {
+            setOpaque(false);
+        }
+
+        @Override
+        protected void paintComponent(Graphics g) {
+            Graphics2D g2 = (Graphics2D) g.create();
+            g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+
+            int w = getWidth();
+            int h = getHeight();
+            Shape clip = new RoundRectangle2D.Double(0, 4, w, h - 4, 16, 16);
+            g2.setClip(clip);
+
+            // Sky gradient
+            g2.setPaint(new GradientPaint(0, 4, new Color(166, 212, 248), 0, h, new Color(214, 236, 252)));
+            g2.fillRect(0, 4, w, h);
+
+            // Distant blue hills
+            g2.setColor(new Color(110, 166, 218));
+            Path2D hills = new Path2D.Double();
+            hills.moveTo(0, h * 0.62);
+            hills.curveTo(w * 0.28, h * 0.35, w * 0.65, h * 0.52, w, h * 0.42);
+            hills.lineTo(w, h);
+            hills.lineTo(0, h);
+            hills.closePath();
+            g2.fill(hills);
+
+            // Green foreground lawn
+            g2.setColor(new Color(44, 138, 86));
+            g2.fillRoundRect(-10, (int) (h * 0.72), w + 20, h, 24, 24);
+
+            // Stylized community house
+            int hx = (int) (w * 0.28);
+            int hy = (int) (h * 0.44);
+            g2.setColor(new Color(252, 243, 218));
+            g2.fillRect(hx, hy + 14, 62, 30);
+            g2.setColor(new Color(28, 72, 128));
+            Polygon roof = new Polygon(
+                new int[]{hx - 6, hx + 31, hx + 68},
+                new int[]{hy + 15, hy, hy + 15},
+                3
+            );
+            g2.fillPolygon(roof);
+
+            // Windows
+            g2.setColor(SOLAR_GOLD);
+            g2.fillRect(hx + 12, hy + 21, 10, 10);
+            g2.fillRect(hx + 40, hy + 21, 10, 10);
+
+            g2.setClip(null);
+            g2.dispose();
+        }
+    }
+
+    private static class RoundedImagePreview extends JPanel {
+        private BufferedImage image;
+
+        RoundedImagePreview() {
+            setOpaque(false);
+            setBorder(new EmptyBorder(4, 0, 14, 0));
+        }
+
+        public void setImage(BufferedImage img) {
+            this.image = img;
+            if (img != null) {
+                setPreferredSize(new Dimension(540, 225));
+                setMaximumSize(new Dimension(680, 235));
+            } else {
+                setPreferredSize(new Dimension(0, 0));
+                setMaximumSize(new Dimension(0, 0));
+            }
+        }
+
+        @Override
+        protected void paintComponent(Graphics g) {
+            super.paintComponent(g);
+            if (image == null) return;
+            Graphics2D g2 = (Graphics2D) g.create();
+            g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+            g2.setRenderingHint(RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_BILINEAR);
+
+            int w = Math.min(getWidth(), 640);
+            int h = getHeight() - 14;
+            if (w <= 0 || h <= 0) {
+                g2.dispose();
+                return;
+            }
+
+            Shape clip = new RoundRectangle2D.Double(0, 2, w, h, 20, 20);
+            g2.setClip(clip);
+            g2.drawImage(image, 0, 2, w, h, this);
+            g2.setClip(null);
+            g2.setColor(BORDER_LIGHT);
+            g2.drawRoundRect(0, 2, w - 1, h - 1, 20, 20);
+            g2.dispose();
+        }
+    }
+
+    private static class RoundedWorkspacePanel extends JPanel {
+        RoundedWorkspacePanel() {
+            setOpaque(false);
+        }
+
+        @Override
+        protected void paintComponent(Graphics g) {
+            Graphics2D g2 = (Graphics2D) g.create();
+            g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+            g2.setColor(BG_CANVAS);
+            g2.fillRoundRect(0, 0, getWidth() + 24, getHeight() + 24, 36, 36);
+            g2.dispose();
+            super.paintComponent(g);
+        }
+    }
+
+    private static class NavPillButton extends JButton {
+        private final String pageKey;
+        private boolean active = false;
+
+        NavPillButton(String icon, String text, String pageKey) {
+            super(icon + "   " + text);
+            this.pageKey = pageKey;
+            setHorizontalAlignment(SwingConstants.LEFT);
+            setFont(new Font("SansSerif", Font.BOLD, 12));
+            setContentAreaFilled(false);
+            setBorderPainted(false);
+            setFocusPainted(false);
+            setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
+            setBorder(new EmptyBorder(10, 16, 10, 14));
+            setForeground(Color.WHITE);
+        }
+
+        public String getPageKey() {
+            return pageKey;
+        }
+
+        public void setActive(boolean active) {
+            this.active = active;
+            setForeground(active ? NAVY_BOTTOM : new Color(230, 240, 252));
+            repaint();
+        }
+
+        @Override
+        protected void paintComponent(Graphics g) {
+            Graphics2D g2 = (Graphics2D) g.create();
+            g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+            if (active) {
+                g2.setPaint(new GradientPaint(0, 0, SOLAR_GOLD, getWidth(), 0, new Color(252, 211, 77)));
+                g2.fillRoundRect(0, 0, getWidth(), getHeight(), 16, 16);
+            } else if (getModel().isRollover()) {
+                g2.setColor(new Color(255, 255, 255, 22));
+                g2.fillRoundRect(0, 0, getWidth(), getHeight(), 16, 16);
+            }
+            g2.dispose();
+            super.paintComponent(g);
+        }
+    }
+
+    private static class PillButton extends JButton {
+        private final Color baseColor;
+        private final Color hoverColor;
+
+        PillButton(String text, Color baseColor, Color hoverColor, Color textColor) {
+            super(text);
+            this.baseColor = baseColor;
+            this.hoverColor = hoverColor;
+            setForeground(textColor);
+            setContentAreaFilled(false);
+            setBorderPainted(false);
+            setFocusPainted(false);
+            setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
+        }
+
+        @Override
+        protected void paintComponent(Graphics g) {
+            Graphics2D g2 = (Graphics2D) g.create();
+            g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+            g2.setColor(getModel().isRollover() ? hoverColor : baseColor);
+            g2.fillRoundRect(0, 0, getWidth(), getHeight(), getHeight(), getHeight());
+            g2.dispose();
+            super.paintComponent(g);
+        }
+    }
+
+    private class HeroBannerPanel extends JPanel {
+        private BufferedImage backgroundImage;
+
+        HeroBannerPanel(String imagePath) {
+            setOpaque(false);
+            try {
+                File imageFile = new File(imagePath);
+                if (imageFile.isFile()) backgroundImage = ImageIO.read(imageFile);
+                if (backgroundImage == null) {
+                    java.net.URL resource = getClass().getResource("/images/hero-drought.png");
+                    if (resource != null) backgroundImage = ImageIO.read(resource);
+                }
+            } catch (Exception ignored) {
+            }
+        }
+
+        @Override
+        protected void paintComponent(Graphics g) {
+            Graphics2D g2 = (Graphics2D) g.create();
+            g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+
+            int w = getWidth();
+            int h = getHeight();
+            Shape clip = new RoundRectangle2D.Double(0, 0, w, h, 24, 24);
+            g2.setClip(clip);
+
+            if (backgroundImage != null) {
+                g2.drawImage(backgroundImage, 0, 0, w, h, this);
+                g2.setPaint(new GradientPaint(
+                    0, 0, new Color(10, 42, 82, 235),
+                    w * 0.72f, 0, new Color(14, 72, 128, 75)
+                ));
+                g2.fillRect(0, 0, w, h);
+            } else {
+                g2.setPaint(new GradientPaint(0, 0, new Color(11, 52, 102), w, h, new Color(24, 118, 178)));
+                g2.fillRect(0, 0, w, h);
+            }
+
+            g2.setClip(null);
+            g2.setColor(new Color(180, 206, 234));
+            g2.drawRoundRect(0, 0, w - 1, h - 1, 24, 24);
+            g2.dispose();
+            super.paintComponent(g);
+        }
+    }
+
+    private static class GlassWeatherPanel extends JPanel {
+        GlassWeatherPanel() {
+            setOpaque(false);
+        }
+
+        @Override
+        protected void paintComponent(Graphics g) {
+            Graphics2D g2 = (Graphics2D) g.create();
+            g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+            int w = getWidth();
+            int h = getHeight();
+            g2.setPaint(new GradientPaint(0, 0, new Color(36, 78, 122, 165), 0, h, new Color(22, 54, 92, 195)));
+            g2.fillRoundRect(0, 0, w, h, 20, 20);
+            g2.setColor(new Color(255, 255, 255, 95));
+            g2.drawRoundRect(0, 0, w - 1, h - 1, 20, 20);
+            g2.dispose();
+            super.paintComponent(g);
+        }
+    }
+
+    private static class SunCloudGraphic extends JLabel {
+        SunCloudGraphic() {
+            setOpaque(false);
+        }
+
+        @Override
+        protected void paintComponent(Graphics g) {
+            Graphics2D g2 = (Graphics2D) g.create();
+            g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+
+            g2.setColor(new Color(253, 224, 71, 80));
+            g2.fillOval(2, 2, 32, 32);
+            g2.setPaint(new GradientPaint(5, 5, new Color(254, 240, 138), 28, 28, SOLAR_GOLD));
+            g2.fillOval(6, 6, 24, 24);
+
+            g2.setColor(new Color(248, 250, 252, 240));
+            g2.fillOval(18, 18, 18, 16);
+            g2.fillOval(28, 20, 16, 14);
+            g2.fillRoundRect(12, 24, 36, 14, 14, 14);
+
+            g2.dispose();
+        }
+    }
+
+    private static class GradientModuleCard extends JPanel {
+        private final ModuleCardStyle style;
+        private boolean hovered = false;
+
+        GradientModuleCard(ModuleCardStyle style) {
+            this.style = style;
+            setOpaque(false);
+        }
+
+        public void setHovered(boolean hovered) {
+            this.hovered = hovered;
+            repaint();
+        }
+
+        @Override
+        protected void paintComponent(Graphics g) {
+            Graphics2D g2 = (Graphics2D) g.create();
+            g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+
+            int w = getWidth();
+            int h = getHeight();
+
+            g2.setColor(new Color(15, 41, 78, hovered ? 28 : 14));
+            g2.fillRoundRect(2, 4, w - 4, h - 4, 22, 22);
+
+            g2.setPaint(new GradientPaint(0, 0, style.gradStart, w, h, style.gradEnd));
+            g2.fillRoundRect(0, 0, w - 2, h - 3, 20, 20);
+
+            g2.setColor(new Color(255, 255, 255, 55));
+            g2.fillOval(w - 115, -20, 130, 130);
+
+            g2.setColor(hovered ? style.circleColor : style.borderColor);
+            g2.setStroke(new BasicStroke(hovered ? 1.8f : 1.2f));
+            g2.drawRoundRect(0, 0, w - 3, h - 4, 20, 20);
+
+            g2.dispose();
+            super.paintComponent(g);
+        }
+    }
+
+    private static class ReminderBannerPanel extends JPanel {
+        ReminderBannerPanel() {
+            setOpaque(false);
+        }
+
+        @Override
+        protected void paintComponent(Graphics g) {
+            Graphics2D g2 = (Graphics2D) g.create();
+            g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+            int w = getWidth();
+            int h = getHeight();
+
+            g2.setPaint(new GradientPaint(0, 0, new Color(254, 243, 199), w, 0, new Color(252, 211, 77)));
+            g2.fillRoundRect(0, 0, w - 1, h - 1, 16, 16);
+
+            g2.setColor(new Color(217, 155, 28, 55));
+            int[] bx = {w - 160, w - 138, w - 118, w - 95, w - 72, w - 50, w - 30};
+            int[] bw = {18, 16, 20, 18, 18, 16, 22};
+            int[] bh = {22, 32, 18, 28, 20, 30, 16};
+            for (int i = 0; i < bx.length; i++) {
+                g2.fillRect(bx[i], h - bh[i] - 2, bw[i], bh[i]);
+            }
+
+            g2.setColor(new Color(245, 190, 66));
+            g2.drawRoundRect(0, 0, w - 1, h - 1, 16, 16);
+            g2.dispose();
+            super.paintComponent(g);
+        }
     }
 
     private static class ScrollablePanel extends JPanel implements Scrollable {
@@ -1714,16 +2583,6 @@ public class SinagApp extends JFrame {
             setOpaque(false);
         }
 
-        public void setFillColor(Color fillColor) {
-            this.fillColor = fillColor;
-            repaint();
-        }
-
-        public void setBorderColor(Color borderColor) {
-            this.borderColor = borderColor;
-            repaint();
-        }
-
         @Override
         protected void paintComponent(Graphics g) {
             Graphics2D g2 = (Graphics2D) g.create();
@@ -1732,44 +2591,6 @@ public class SinagApp extends JFrame {
             g2.fillRoundRect(0, 0, getWidth() - 1, getHeight() - 1, cornerRadius, cornerRadius);
             g2.setColor(borderColor);
             g2.drawRoundRect(0, 0, getWidth() - 1, getHeight() - 1, cornerRadius, cornerRadius);
-            g2.dispose();
-            super.paintComponent(g);
-        }
-    }
-
-    private class GradientPanel extends JPanel {
-        private BufferedImage backgroundImage;
-
-        GradientPanel(String imagePath) {
-            setOpaque(false);
-            try {
-                File imageFile = new File(imagePath);
-                if (imageFile.isFile()) backgroundImage = ImageIO.read(imageFile);
-                if (backgroundImage == null) {
-                    java.net.URL resource = getClass().getResource("/images/hero-drought.png");
-                    if (resource != null) backgroundImage = ImageIO.read(resource);
-                }
-                if (backgroundImage == null) {
-                    System.err.println("SINAG hero image not found: " + imagePath);
-                }
-            } catch (Exception ex) {
-                System.err.println("Could not load hero image: " + ex.getMessage());
-            }
-        }
-
-        @Override
-        protected void paintComponent(Graphics g) {
-            Graphics2D g2 = (Graphics2D) g.create();
-            g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
-            if (backgroundImage != null) {
-                g2.drawImage(backgroundImage, 0, 0, getWidth(), getHeight(), this);
-                g2.setColor(new Color(8, 35, 48, 125));
-                g2.fillRoundRect(0, 0, getWidth(), getHeight(), 20, 20);
-            } else {
-                g2.setPaint(new GradientPaint(0, 0, new Color(13, 115, 119),
-                        getWidth(), getHeight(), new Color(15, 41, 58)));
-                g2.fillRoundRect(0, 0, getWidth(), getHeight(), 20, 20);
-            }
             g2.dispose();
             super.paintComponent(g);
         }
