@@ -121,8 +121,7 @@ public class SinagApp extends JFrame {
         JPanel brandPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 0, 0));
         brandPanel.setOpaque(false);
 
-        // Official SINAG logo image (save the new image as images/sinag-logo.jpg).
-        JLabel logo = new JLabel(loadImageIcon("images/sinag-logo.jpg", 76, 88));
+        JLabel logo = new JLabel(loadImageIcon("images/sinag-logo.jpg", 64, 72));
         logo.setBorder(new EmptyBorder(0, 0, 0, 12));
 
         JLabel tagline = new JLabel("   |   EL NIÑO AWARENESS & COMMUNITY READINESS");
@@ -132,11 +131,17 @@ public class SinagApp extends JFrame {
         brandPanel.add(logo);
         brandPanel.add(tagline);
 
+        // Wrap adminBtn in a GridBagLayout panel so BorderLayout.EAST does not stretch it vertically
+        JPanel rightWrapper = new JPanel(new GridBagLayout());
+        rightWrapper.setOpaque(false);
+
         JButton adminBtn = createStyledButton("⚙  ADMIN PORTAL", TEAL_PRIMARY);
+        adminBtn.setBorder(new EmptyBorder(10, 18, 10, 18));
         adminBtn.addActionListener(e -> openAdminLogin());
+        rightWrapper.add(adminBtn);
 
         header.add(brandPanel, BorderLayout.WEST);
-        header.add(adminBtn, BorderLayout.EAST);
+        header.add(rightWrapper, BorderLayout.EAST);
         return header;
     }
 
@@ -253,13 +258,12 @@ public class SinagApp extends JFrame {
         setActiveNav("Home");
         JPanel homePanel = new JPanel(new BorderLayout(0, 18));
         homePanel.setBackground(BG_CANVAS);
-        homePanel.setBorder(new EmptyBorder(24, 28, 22, 28));
+        homePanel.setBorder(new EmptyBorder(20, 28, 20, 28));
 
-        // Hero Banner with Solar-to-Ocean Gradient
+        // Hero Banner (Natural height so it never squishes the center grid)
         GradientPanel heroBanner = new GradientPanel("images/hero-drought.png");
         heroBanner.setLayout(new BorderLayout(20, 0));
-        heroBanner.setBorder(new EmptyBorder(26, 30, 26, 30));
-        heroBanner.setPreferredSize(new Dimension(900, 205));
+        heroBanner.setBorder(new EmptyBorder(22, 28, 22, 28));
 
         JPanel heroText = new JPanel();
         heroText.setOpaque(false);
@@ -271,23 +275,23 @@ public class SinagApp extends JFrame {
 
         JLabel title = new JLabel("Be informed. Be prepared. Stay safe.");
         title.setForeground(Color.WHITE);
-        title.setFont(new Font("SansSerif", Font.BOLD, 26));
+        title.setFont(new Font("SansSerif", Font.BOLD, 25));
 
         JLabel subtitle = new JLabel("Actionable climate knowledge, water-saving advisories, and readiness guides.");
         subtitle.setForeground(new Color(224, 242, 254));
         subtitle.setFont(new Font("SansSerif", Font.PLAIN, 13));
 
         heroText.add(eyebrow);
-        heroText.add(Box.createVerticalStrut(10));
-        heroText.add(title);
         heroText.add(Box.createVerticalStrut(8));
+        heroText.add(title);
+        heroText.add(Box.createVerticalStrut(6));
         heroText.add(subtitle);
         heroBanner.add(heroText, BorderLayout.CENTER);
 
         // Right-side Live Weather Card inside Hero
         RoundedPanel weatherCard = new RoundedPanel(16, new Color(15, 41, 58, 170), new Color(255, 255, 255, 60));
         weatherCard.setLayout(new BoxLayout(weatherCard, BoxLayout.Y_AXIS));
-        weatherCard.setBorder(new EmptyBorder(14, 18, 14, 18));
+        weatherCard.setBorder(new EmptyBorder(12, 18, 12, 18));
 
         JLabel weatherBadge = new JLabel("☀ LIVE WEATHER");
         weatherBadge.setFont(new Font("SansSerif", Font.BOLD, 10));
@@ -295,7 +299,7 @@ public class SinagApp extends JFrame {
         weatherBadge.setAlignmentX(Component.RIGHT_ALIGNMENT);
 
         JLabel weatherTemp = new JLabel("Loading...");
-        weatherTemp.setFont(new Font("SansSerif", Font.BOLD, 25));
+        weatherTemp.setFont(new Font("SansSerif", Font.BOLD, 24));
         weatherTemp.setForeground(Color.WHITE);
         weatherTemp.setAlignmentX(Component.RIGHT_ALIGNMENT);
 
@@ -376,33 +380,20 @@ public class SinagApp extends JFrame {
             "Open Guides", () -> showContentPage("Guide"));
 
         addInteractiveHomeCard(cardGrid, "★", "PREPAREDNESS QUIZ", new Color(217, 119, 6),
-            "Challenge yourself with interactive questions and instant explanations.",
+            "Challenge yourself with timed questions, streaks, and instant explanations.",
             "Start Quiz", this::showQuiz);
 
         centerSection.add(cardGrid, BorderLayout.CENTER);
 
+        // Compact Bottom Reminder Bar (Natural height so center cards have full vertical space)
         RoundedPanel reminderBar = new RoundedPanel(12, SOLAR_SOFT, new Color(253, 230, 138));
-        reminderBar.setLayout(new BorderLayout(8, 4));
-        reminderBar.setBorder(new EmptyBorder(14, 18, 14, 18));
-        reminderBar.setPreferredSize(new Dimension(900, 105));
+        reminderBar.setLayout(new BorderLayout());
+        reminderBar.setBorder(new EmptyBorder(11, 18, 11, 18));
 
-        JLabel reminderTitle = new JLabel("☀  PREPAREDNESS TIP OF THE DAY");
-        reminderTitle.setFont(new Font("SansSerif", Font.BOLD, 13));
-        reminderTitle.setForeground(SOLAR_TEXT);
-
-        JLabel reminderText = new JLabel(
-            "Conserve water, stay hydrated, and follow verified climate advisories from PAGASA and your local government."
-        );
-        reminderText.setFont(new Font("SansSerif", Font.PLAIN, 12));
-        reminderText.setForeground(OCEAN_DARK);
-
-        JPanel reminderContent = new JPanel();
-        reminderContent.setOpaque(false);
-        reminderContent.setLayout(new BoxLayout(reminderContent, BoxLayout.Y_AXIS));
-        reminderContent.add(reminderTitle);
-        reminderContent.add(Box.createVerticalStrut(7));
-        reminderContent.add(reminderText);
-        reminderBar.add(reminderContent, BorderLayout.CENTER);
+        JLabel reminderText = new JLabel("☀  PREPAREDNESS REMINDER: Conserve water, stay hydrated, and follow verified climate advisories from PAGASA and your local government.");
+        reminderText.setFont(new Font("SansSerif", Font.BOLD, 11));
+        reminderText.setForeground(SOLAR_TEXT);
+        reminderBar.add(reminderText, BorderLayout.CENTER);
 
         homePanel.add(heroBanner, BorderLayout.NORTH);
         homePanel.add(centerSection, BorderLayout.CENTER);
@@ -413,20 +404,21 @@ public class SinagApp extends JFrame {
 
     private void addInteractiveHomeCard(JPanel parentGrid, String icon, String title, Color accentColor,
                                         String desc, String buttonText, Runnable onClickAction) {
-        RoundedPanel card = new RoundedPanel(14, Color.WHITE, BORDER_LIGHT);
-        card.setLayout(new BorderLayout(0, 12));
-        card.setBorder(new EmptyBorder(20, 22, 18, 22));
+        RoundedPanel card = new RoundedPanel(16, Color.WHITE, BORDER_LIGHT);
+        card.setLayout(new BorderLayout(0, 10));
+        card.setBorder(new EmptyBorder(18, 22, 16, 22));
+        card.setPreferredSize(new Dimension(0, 155));
         card.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
 
         JPanel cardHeader = new JPanel(new FlowLayout(FlowLayout.LEFT, 0, 0));
         cardHeader.setOpaque(false);
 
         JLabel iconBadge = new JLabel(icon);
-        iconBadge.setFont(new Font("SansSerif", Font.BOLD, 14));
+        iconBadge.setFont(new Font("SansSerif", Font.BOLD, 16));
         iconBadge.setForeground(accentColor);
 
         JLabel titleLabel = new JLabel("   " + title);
-        titleLabel.setFont(new Font("SansSerif", Font.BOLD, 12));
+        titleLabel.setFont(new Font("SansSerif", Font.BOLD, 13));
         titleLabel.setForeground(OCEAN_DARK);
 
         cardHeader.add(iconBadge);
@@ -442,7 +434,7 @@ public class SinagApp extends JFrame {
         descArea.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
 
         JButton openBtn = createStyledButton(buttonText + "  →", TEAL_SOFT);
-        openBtn.setForeground(new Color(15, 118, 110));
+        openBtn.setForeground(TEAL_PRIMARY);
         openBtn.setFont(new Font("SansSerif", Font.BOLD, 12));
         openBtn.setBorder(new EmptyBorder(10, 16, 10, 16));
         openBtn.addActionListener(e -> onClickAction.run());
@@ -1771,7 +1763,6 @@ public class SinagApp extends JFrame {
             g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
             if (backgroundImage != null) {
                 g2.drawImage(backgroundImage, 0, 0, getWidth(), getHeight(), this);
-                // Overlay keeps the white hero text readable over the photo.
                 g2.setColor(new Color(8, 35, 48, 125));
                 g2.fillRoundRect(0, 0, getWidth(), getHeight(), 20, 20);
             } else {
